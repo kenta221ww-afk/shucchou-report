@@ -421,7 +421,7 @@ function openReportPage(data, mode) {
     '@media print{.action-banner{display:none!important;}' +
     '@page{size:A4 portrait;margin:12mm 10mm 18mm 10mm;}' +
     '.print-page{width:100%!important;padding:0!important;margin:0!important;}' +
-    '.report-render .report-body{height:calc(267mm - 45mm);overflow:hidden!important;}}' +
+    '.report-render .report-body{height:calc(240mm - 45mm);overflow:hidden!important;}}' +
     '</style></head><body>' +
     '<div class="action-banner">' + bannerText + '</div>' +
     '<div class="print-page">' + renderReport(data) + '</div>' +
@@ -429,7 +429,7 @@ function openReportPage(data, mode) {
     'setTimeout(function(){' +
     '  var body=document.querySelector(".report-body");' +
     '  if(body){' +
-    '    body.style.height="calc(267mm - 45mm)";' +
+    '    body.style.height="calc(240mm - 45mm)";' +
     '    var s=parseFloat(getComputedStyle(body).fontSize);' +
     '    var n=0;' +
     '    while(body.scrollHeight>body.clientHeight+1&&s>4&&n<300){s-=0.2;body.style.fontSize=s+"px";n++;}' +
