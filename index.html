@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>出張報告書作成</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif;
+    background: #f0f2f5;
+    padding: 12px;
+    -webkit-text-size-adjust: 100%;
+  }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 14px; color: #333; }
+
+  .card {
+    background: #fff; border-radius: 10px; padding: 16px;
+    margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  .card h2 {
+    font-size: 14px; color: #666; margin-bottom: 10px;
+    border-bottom: 1px solid #eee; padding-bottom: 6px;
+  }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; margin-top: 10px; }
+  label:first-child { margin-top: 0; }
+  input[type="text"], input[type="date"] {
+    width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;
+    font-size: 16px; -webkit-appearance: none; appearance: none; background: #fafafa;
+  }
+  input[type="date"] { font-size: 14px; }
+
+  .date-row { display: flex; align-items: center; gap: 6px; }
+  .date-row input { flex: 1; }
+  .date-row span { font-size: 14px; color: #888; flex-shrink: 0; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; }
+  .checkbox-row label { margin: 0; font-size: 13px; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px;
+    background: #fff; font-size: 14px; cursor: pointer;
+  }
+  .toolbar button:active { background: #eee; }
+  .toolbar input[type="color"] { width: 36px; height: 32px; border: 1px solid #ccc; border-radius: 4px; padding: 2px; }
+
+  #content-editor {
+    border: 1px solid #ccc; border-radius: 6px; padding: 10px;
+    min-height: 180px; font-size: 14px; line-height: 1.6;
+    background: #fafafa; outline: none;
+  }
+  .char-counter { text-align: right; font-size: 12px; color: #888; margin-top: 4px; }
+  .char-counter.over { color: #e53935; }
+
+  .btn {
+    display: inline-block; padding: 12px 20px; border: none; border-radius: 8px;
+    font-size: 15px; cursor: pointer; text-align: center; width: 100%;
+    margin-top: 8px; color: #fff;
+  }
+  .btn-primary { background: #1976d2; }
+  .btn-primary:active { background: #1565c0; }
+  .btn-secondary { background: #43a047; }
+  .btn-secondary:active { background: #388e3c; }
+  .btn-outline { background: #fff; color: #333; border: 1px solid #ccc; }
+  .btn-outline:active { background: #f5f5f5; }
+  .btn-danger { background: #e53935; }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+
+  .top-menu { display: flex; flex-direction: column; gap: 16px; margin-top: 30px; flex: 1; }
+  .top-menu .menu-btn {
+    width: 100%; flex: 1; min-height: 120px; border: none; border-radius: 16px;
+    font-size: 24px; font-weight: bold; cursor: pointer; color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    letter-spacing: 3px;
+    transition: transform 0.1s;
+  }
+  .top-menu .menu-btn:active { transform: scale(0.97); }
+  .menu-btn-new { background: linear-gradient(135deg, #3a3a3a, #5a5a5a); }
+  .menu-btn-new:active { background: linear-gradient(135deg, #2a2a2a, #4a4a4a); }
+  .menu-btn-past { background: linear-gradient(135deg, #4a7fa5, #6ba3c7); }
+  .menu-btn-past:active { background: linear-gradient(135deg, #3a6f95, #5b93b7); }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+  #screen-top.active { display: flex; }
+
+  .back-btn {
+    background: none; border: none; font-size: 14px; color: #1976d2;
+    cursor: pointer; margin-bottom: 12px; padding: 4px 0;
+  }
+
+  .report-list-item {
+    padding: 12px; border-bottom: 1px solid #eee; cursor: pointer;
+  }
+  .report-list-item:last-child { border-bottom: none; }
+  .report-list-item:active { background: #f5f5f5; }
+  .report-list-item .title { font-size: 15px; font-weight: bold; color: #333; }
+  .report-list-item .meta { font-size: 12px; color: #888; margin-top: 4px; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: flex-start;
+    overflow-y: auto; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-content {
+    background: #fff; border-radius: 10px; width: 100%; max-width: 800px;
+    padding: 16px; position: relative;
+  }
+  .modal-buttons { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .modal-buttons .btn { flex: 1; min-width: 80px; margin-top: 0; }
+
+  /* Share URL box */
+  .share-box {
+    background: #e8f5e9; border-radius: 8px; padding: 12px; margin-top: 12px;
+  }
+  .share-box p { font-size: 13px; color: #333; margin-bottom: 8px; }
+  .share-url {
+    width: 100%; padding: 8px; border: 1px solid #a5d6a7; border-radius: 6px;
+    font-size: 12px; background: #fff; word-break: break-all;
+  }
+
+  /* Report rendering */
+  .report-render { font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif; }
+  .report-render .report-title {
+    text-align: center; font-size: 20pt; font-weight: bold; margin-bottom: 12px;
+  }
+  .report-render table {
+    width: 100%; border-collapse: collapse; margin-bottom: 10px;
+    border: 2px solid #000;
+  }
+  .report-render table td {
+    border: 1px solid #000; padding: 3px 4px; vertical-align: middle; white-space: nowrap;
+  }
+  .report-render table td.lbl { font-size: 7pt; font-weight: bold; background: #f9f9f9; }
+  .report-render table td.date-val { font-size: 6pt; }
+  .report-render table td.val { font-size: 8pt; }
+  .report-render .report-body {
+    font-size: 10pt; line-height: 1.6; border: 2px solid #000; padding: 10px;
+    min-height: 200px;
+  }
+  /* Auto-fit text in table cells */
+  .report-render table td { overflow: hidden; }
+
+  /* Print styles */
+  @media print {
+    body { background: #fff; padding: 0; margin: 0; }
+    .no-print { display: none !important; }
+    .back-btn { display: none !important; }
+    .screen:not(.active) { display: none !important; }
+    .screen.active { display: block !important; }
+    #screen-top, #screen-form, #screen-past { display: none !important; }
+    .modal-overlay { position: static; background: none; padding: 0; display: block !important; }
+    .modal-content { padding: 0; box-shadow: none; }
+    .report-render .report-body { min-height: auto; }
+    @page { size: A4 portrait; margin: 10mm 10mm 15mm 10mm; }
+  }
+
+  /* PDF tab styles */
+  .pdf-banner {
+    background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;
+    padding: 12px; margin-bottom: 16px; font-size: 14px; text-align: center;
+  }
+
+  .loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- Top Screen -->
+<div id="screen-top" class="screen active" style="flex-direction:column;min-height:calc(100vh - 24px);">
+  <div style="text-align:center;padding-top:30px;">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADWCAYAAACUhM11AAABY2lDQ1BrQ0dDb2xvclNwYWNlRGlzcGxheVAzAAAokX2QsUvDUBDGv1aloHUQHRwcMolDlJIKuji0FURxCFXB6pS+pqmQxkeSIgU3/4GC/4EKzm4Whzo6OAiik+jm5KTgouV5L4mkInqP435877vjOCA5bnBu9wOoO75bXMorm6UtJfWMBL0gDObxnK6vSv6uP+P9PvTeTstZv///jcGK6TGqn5QZxl0fSKjE+p7PJe8Tj7m0FHFLshXyieRyyOeBZ71YIL4mVljNqBC/EKvlHt3q4brdYNEOcvu06WysyTmUE1jEDjxw2DDQhAId2T/8s4G/gF1yN+FSn4UafOrJkSInmMTLcMAwA5VYQ4ZSk3eO7ncX3U+NtYMnYKEjhLiItZUOcDZHJ2vH2tQ8MDIEXLW54RqB1EeZrFaB11NguASM3lDPtlfNauH26Tww8CjE2ySQOgS6LSE+joToHlPzA3DpfAEDp2ITpJYOWwAAAARjSUNQDA0AAW4D4+8AAACsZVhJZk1NACoAAAAIAAMBMQACAAAAQgAAADIBMgACAAAAGgAAAHSHaQAEAAAAAQAAAI4AAAAAbWFjT1Mg44OQ44O844K444On44OzMjYuNS4x77yI44OT44Or44OJMjVGODDvvIkgUXVhcnR6IFBERkNvbnRleHQAMjAyNi0wNi0yNSAxMjoyMDoxNyArMDAwMAAAAqACAAQAAAABAAAAyKADAAQAAAABAAAA1gAAAAA4Dcr+AAABlWlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iPgogICAgICAgICA8eG1wOkNyZWF0b3JUb29sPm1hY09TIOODkOODvOOCuOODp+ODszI2LjUuMe+8iOODk+ODq+ODiTI1Rjgw77yJIFF1YXJ0eiBQREZDb250ZXh0PC94bXA6Q3JlYXRvclRvb2w+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgppy1l6AAAhX0lEQVR4Ae1d914byZo9CkQRDMZk40iyAY/BRGfP3HmF3fsM+8fuu+z+9g32DfavveM0Y5NsGGyibaIxOJGzAcGer4SwhosFAgGt1tczshp1d6nqVB19saocmzyghyKgCOyKgHPXT/VDRUARMAgoQXQgKAJBEFCCBAFHLykCShAdA4pAEASUIEHA0UuKgBJEx4AiEAQBJUgQcPSSIqAE0TGgCARBQAkSBBy9pAgoQXQMKAJBEFCCBAFHLykCShAdA4pAEASUIEHA0UuKgBJEx4AiEAQBJUgQcPSSIqAE0TGgCARBQAkSBBy9pAgoQXQMKAJBEFCCBAFHLykCShAdA4pAEASUIEHA0UuKgBLkhMeALipzwh2wx9e797iul48IAa/Xi+XlZczMzCA+Ph7JSUmIjYuDw+E4om/UYg+CgBLkIKgd8BmRFmtra4YYo8PDePzkCZ4/e4aMjAz88uvfUFVZhbTTpw1h3G7tmgPCHNbHHLpwXFjx3LWwjY0NrKysGGnR3dWJJ4+foO1lK2amZ+AiETZ5HU4n8vJy0XDzFm7duo2Lly7D40lEnEqVXTE9rg+VIEeItEiLFapRnz9/wvPnz/H4t98wMDCI9fU1uN0x5ESAOsX1Ldc3vPCuryMpOQlXrlzF7bt3caO6xkiYhIR488wRVleL3gUBJcguoBzmI1Gjvn37ZtSonq5uPHn6FC3NjfhCkjidLrhdrl3tDFn/1U8XvyrmcDmRm52D2vp63Lp9GyWlV5CQkKBS5TAdFOKzSpAQAfvR7dtG9/Q0CdGM358+RldXFxbnF+GOjYGLKtRBDi/Vr3VKIk9SMsquXsHdew9QWX0Dp2mrqFQ5CKKhPaMECQ2vv97Nn/3VtVUjLUaGBvHwt4doIjlGR98DG5uIiXHvKi3+Wsj+/jJSheqXeLnycnNxo6Yat+/cQ+kVlSr7Q/BgdylBDoDbX43u13hsjO4XmJuZhZMqlKhRR3ms00UstoqHruHy8grcpGEvhMk4c8aoYOoBCx/6SpAQsDRGN71RH8fHaHQ34snDhxgc/G50O6hFObYtiRAKPuCtflsF/OL8/HxU19bizp3bKC4pIVESERsbS7vnYKrdAatku8eUIHt0qd/oXpifx9u+N3j6+1M0NT3H189ffEa3+2ilxR7V274stoqXtkocXcNX6QF78OBnXPvpJ2RlZ6tU2UYp9BMlyA8wW6cKI7GLqclJtNKuEDWqp6cbS0uLtC0ObnT/4OvC8rF4wTYkGMm6iyzLzspCw+1buHP7DoqKi5GQqFIlVKCVIDsQW12l0b20hP7+d3j2xx9ofPYcox9GIZIkhkE9MZIdNM43/T7ZHc+f5J+BrmLWEF46CsQDlmCkShnu3buPa5XXkUOpEk93sdoqe/eWEoQY+Y3uudk5vH7dgYe0LTraX2J2Zs4MItcRG917d9Ph7vjuAXMiJyuTUuUubt66SalShERKlbi4+LB52w5XU+s9HdUE8edFffz4kXGLp3jGlzG66bp1x4iBa0ExccgxJLbK2uqaidYXU+26e/8+qmtqcCbjjJEqoj7q8R2BqCOI3+iem5tD/9s3ePTokQnsTXydoDPIYdSo7/DY9+y7VKGtkp2Fqupa3L93DyVbcRXJMNbMYlpyBEpUV9sffqN7cmISL1pbGdT7B3r7erCytGyM7kB36F91edtDA6+X0XrmhyV6klBcVGSkSm19HXPAGFeJp63CgGe0HrYniD8vaqC/3yQM/v7kKcbHPpjEpx/lRUXrYJDfSvkhkSMrJxu1dfWMq9zF5cJCpCQnIy4KpYotCSJ5UeKiFTWqo70djx4/wus/25luTqObeVFuDZ7t+RtgbBV6wBI9HpSWlOLO/Xu4caMaWXQde/hZoMTds7AIvsFWBPEZ3Ut4/34Uz37/A03Pn2FgcMCkZcQwvVxsDD1CQ0DmqqxSqjjoNs7LPYuff/0V//r3vyMtPS20giL07ohXLkVazM7O4suXz+jre4vGP35HV2cnpcW0MTLF1+9iyoUeoSGwuclJXDzcsW7OckxnKksBrly9isqqKhOZD620yL07YiXIyrLM0JvGGO0JMbqbGhsxMjxi5mK4mf4RLSpAeIfeJmNCm3AyGBpH4zwtPR2XL19CTV0dqjlxK5dZxPzVCe9XWry0iCKIGJHzzImaZPpHb28v2l68QPvLl0Z6iC9OiKGuydBHnOAqL5fLzQxhD3JIhPLycmYI16CsrBypqamhF2qTJyKCIJL+Iat/THz9iva2NiMt+np7mBe1xNRypn9w5l10/a6FY/SRFJQWm5QI8bFxSDmVinPnzxtDvL6hwZyrFLZ4HEQIMDkxgcGBAbS0tBhyjI1+YI7RukkBUWkROlG+SwuXSYk/w9STUk7lraG0qGD27xnOKdHjOwKWkyDihxf3rEgLyZ6VhMHe7i5MT80YL5TkRSkxvnfgfs+2jW5681JSUpDL+SPXucxQQ30DikqKTbB0v2VF032WIYjELaY5n3t05D3a2l4y/aMJw0NDW0Y31SjGLlSNCnVo+oxu+UERozudRndh4WUuAtFgvFF5eXmhFhh1958oQUTci7SQORfG6G57QY/UC0x++Wo6QozuaPOahGMEypwQSXcX+yyJ03KzcnKMsV1bW4eKaxVmqm44vicayjgRgojRPUuj+9OnT1xArQ3NTY149/YtFmQyElWoSE8vP6mBI2n7ImUlfT0lNQUXLl1E5Y0bqKfEOFdwnvPldfptqH1z7AQRadHR0UGDux0vX7TiAycjbTDYZ7xRGukOtf+Me9bnoqXRzbkdmZlZDOhdoX1RiaoqLg/EZU31ODgCxx5Jf8z08v/+r/80LlpZK0qW3vStGbVp2Zl6B4f36J4UUogaFcN5K8lidOfmGbtCpIUa3eHD/dgJ8oWLHczNzXMmW8KOVjDbR63wHZjs/NMXuxC7TFZYlIWuC5lpW1tbT4lxHbl5+Wqy7YTskH8fO0Ek+GTHmXqH7Iegj/ulhcsVA09KEnKYin6VEe6Gm/U0vitMxm3QAvTigRE4doIcuKZR+KAxuiktZH2rU6fSaXRfoBp1A3Wcp3G2oMCk1kQhLMfaZCXIscK9jy9j+scG/3PSRZvMSUpnaHSXlJaaeeNV9EilpUVHmvk+kDqWW5QgxwLz3l8ikW4xu2PjaHSTGPkF51DJSHcdM2mLOA3WrYsp7A3iEdyhBDkCUPddJD1REtQTL15cvIcuWUa6i4pNXpSoUrncUEePk0VACXIC+IvRLS+ZzJXCzXKys5leXlGBBmbRXi0vM0mEJ1At/cpdEFCC7ALK0Xy0lRfFYKhs1pl26hTOX7xopMWNmloU0OjWDIKjQf4wpSpBDoPePp71SwsXd5dKTvFsRbrLaHRX46fr19Xo3geGJ3mLEuSI0Pell3MhOhrXyanJzIU6Z9LLa+iivXz5snHdbn+1WOcaJN2Gw0onSpCw9oZPjZJgaEKCh8t5ZqCQ69+Ke7aaapRsRbDroeTYFRYrfKgECUMv+NUo2bk2JVUi3bmooPrUwM03ZbfaeO5Qq0dkIqAEOXC/+aSFPC7r2J5KO4WLFy+ZbZtl6+YLFy8cuGR90DoIKEFC7Au/tJAtnVNodEukW6REfUM953Rf4wogp0IsUW+3MgJKkH32TqDRLXO6z55jpJuLqEle1KVLlxCji9PtE8nIuk0Jso/+kh2l4ml0y2rnfqO7jtNXZUUQPeyNgBIkaP9yEhd3kJWdmCo4Q08mI13Z2j8j6GN60TYIKEGCdCWzQTi/Ow7/9u//gWvXrgW5Uy/ZFQGdxb9Hz0r6R152zh536WW7IqAE2UfPerdWOt/HrXqLzRBQgtisQ7U54UVACRJePLU0myGgBLFZh2pzwouAEiS8eGppNkNACWKzDtXmhBcBJUh48dTSbIaAEsRmHarNCS8CSpDw4qml2QwBJYjNOlSbE14ElCDhxVNLsxkCShCbdag2J7wIKEHCi6eWZjMElCA261BtTngRUIKEF08tzWYIKEFs1qH+5nD1X57KivG+M//n+h4aAkqQ0PCKmLtlLboNvmQ+vexlqMfBEFCCHAy3iHhqZXkVrd2DGPs8Y7ZZiIhKW6ySOifdYh0SzuosLK7gf/63hdu3JeFa8VkUns3E+Zw0JHsSt74mULLo+qe7Ya8E2Q0VW3zmgJerTgyMTWKyZwTtve9xPu80Ss5novRiLorOZiHnTKrZvEcWwzP0+P6PLRAIRyOUIOFA0aJlyHh3u6lFcyPQydkFfJ2eR9e7D8jJGEThuWxUFOah+FwmzuakI8WTQJKoFNnZlUqQnYjY8G8Z9g5u3OPma3VtA8NjExj+OIW27iFczD+DIkqVq5dyUFiQg+zTqXC7dpqmoopFJ3mUIDYkxG5N8g9vroNHsvgIMDW/hImeYXT2f0Djq1NUv7JReiEHJReyUZBNqZKUYIqSZ7lUNymykzi7fZO9PlOC2Ks/Q2qNkxLFyWG/tr6BIUqVkY8TaOkUqXKaqlcOygtzcbkgG1npKdwezkeTaJMkSpCQhpRNb+bY9+2PuInp+UW86JmnVPmIxs5+lJzLpWTJogfsDC6RLCme6NrrRAli0zEfUrNoYmySJBJUlG0dnPxvbd2LwQ+TGB6fQtPrfrqH01FWeJZkyUERDfucDLFVXCYEKbLlezDS91dI32/hm5UgFu6cY6uakEOGuhnbYpDzlOd+Y31mYQV/vh1D7/BXGvHJPlfxpTwa9dlGsiQnxvti9VKEvfgBJcixjcLI/SIXbRVhz9r6Gr1fkxj9NIUX3e9RsCVVSi9koqggC9npyWbvd19L7cEUJUjkjttjr7kY9A5xAVNSzMwtYmp2Eb1Dn6huJaOYqtcVer9EBbuYn4mkxLhd6ifSKbKIowTZpRv1o90R2Iq3c4xzoJMoPg/YurFTRKq0dg3jYl4Gyi4zUn8uy8RY8hitl81NjQpnFDEhSeS4i5Ugu48F/XQ3BHypweaKTw5wsNPoMC5gns7ML6ONcZXugTFk0YgXz1fZJXrBLuThHNWx1GSJ1kfWoQSJrP6ybm1JFKcQyOHCKuMqw+OTeE97pc3kgGUwrpKFchr2ErnPz0rfdgBYt0G+milBrN5DEVM/38QsB4niYPKj8YBtSZX2nveUKuNo6uin54tEobu4mFH787mUKiZab125ogSJmAFo/Yp+V7u26soPnCJZ6AVbF6nyaRrvOTelrW+U5MgwRn0pc8CKmTiZfTrFkEpo5ktpIbssoJApQaw/7mxRQ/JkW60SW6W9dwQ9g+PI7qAHjPlfVyhRRKpcyM8w0XofSU6+6UqQk++DqKuB5EpKxH6d0foRZhW/p2RpZQ5YQXYaHtQU419+rbEMJpHjb7MMZFqR8CAgBr3kgNFdTBVsbmEZLxl8fN7+jsX7lLXwfM/hSjl+gohqqYcisAMBma/i4uQuSaq30nHsBHHQFej1rmNjQ9bc0EMR+CsC1qLHCYQ0i0tLcaO6Fulp6djk9spCFpkTrYciYEUEjt1Ir6quxqm0U+h/14+uzk68ffsWnz6OY2VlhbqoTx+1kg5qxU7TOh0fAsdOkKQkLkHz03WUlVegprYO/QP96OnuxpveXrwfGcLk5DQlyrrxckjQSQ9F4CQROHaC+BsrM9jOFpw1r8rKSpJjBAPv3qGnpxvdPT34/OkTVpaWzGID4hLUQxE4CQROjCCBjU1NTUV5RQWulpWhtr4eb968wZu+PkqWLgwNDWFmZhob9Jk7SSqVKoHI6flRI2AJgvgbKTZITm6ued2grTI0NIh3tFG6O7vQ1ydS5TNWlpdVqvgB0/cjR8BSBAlsrdgq5bRTrl4tM7aKEOXNmz70dvdiaLCfUoXrzXq9vsUG1FYJhE7Pw4iAZQnib6NIlfz8fPOqplQZHh6m+tWLbqpf/W/fYXx8HMsry1tJcRLWUcPej52+Hx4ByxMksIlJycn0fpWjhLGU2rp6DA4OGu9XT28PDfx+zE5Pcz1a9YAFYqbnh0Mgogjib6rb7Ub+2bPmVXXjBkYoVXrpJu6j90viKmMfRhlXoa1iUq3VA+bHTd9DRyAiCRLYTI/HgytXr6KouBj1DQ0Y7GdcRVzF3T0YpoSZnp5itN7LVGsSRW2VQOj0fB8IRDxB/G0UqZJLD5i8rjOuIu5hcRf30lYRqTLOaP0y4yq+CTxOMy1HrRU/evr+IwRsQ5DABnroARNbpfTKFdTV12FwYABip/RSqog6NjkxwWRJtVUCMdPz3RGwJUH8TZVofV5evnldr6zCyMgwVbABkwMmgcjx8Q9Ykmi9sVXUA+bHTd+/I2BrgnxvJiBxFYmpiFSpqa3FO5PW0mWkyvDgEKamaKvslCrWmBYd2Aw9P2YEooYgflyd3CAjK5tL+vN17aefTA6YBCH7qIKJYS+ZxUuM1stqmzIvWlLxNRnfj170vUcdQQK7OJlxFcn/Ki2lrUIPmETq3/S9QU9XN438AUqVSUbr17nUplIkELdoOo9qgvg72sl50dmUKPKqqpJo/RDnqzCzuKsTQzTq/Tsy+e/X9+hBQAmyo6+Tkjwoo1QpY2zll7/9QikyjbS0tB136Z/RgoAS5Ec9Tc9WUlKyef3oFv3c/ggc+6IN9odUW2gnBJQgdupNbUvYEVCChB1SLdBOCChB7NSb2pawI6AECTukWqCdEFCC2Kk3tS1hR0AJEnZItUA7IaAEsVNvalvCjoASJOyQaoF2QkAJYqfe1LaEHQElSNgh1QLthIASxE69qW0JOwJKkLBDqgXaCQEliJ16U9sSdgSUIGGH1EoFcrqwmTqsMyIP2itKkIMiFyHPOTZdZg2wCKmu5aqpBLFcl4SvQmaqsNNrpEj4So2ukpQgNu7vOW485F1YgFmd2OzSpWtJhtrdOuU2VMQsfr9sry3b2TU2PsfL5hbMD4zAEZcCJGcBcdxZ2B3HFtAm4Q7DgYdYKUqfQER850qQf8YkIj9ZXFxE1+tOtLQ28/01xsfGIJ8JYZyrM9hc+IzNhGQgkURJyIQj1oNNWfzLLGnEe2jNbwpFuI+9Ht8RUIJ8xyIizz5yA6EXL16gtaUV/f1vMTUxiZVvyxQQm9wp2MEhz/9kL3pwN675FWwscRfhmGGS5DTgyQbi0+AQqUJiOEmWv8qViIQkrJVWgoQVzuMpbG11lXs29qG5uQkd7X+a/VDm5+extrbGClAOcPVI/r99+NQnWSGSi+CRLE7vGja/LQCUKohLhiMxExuJGdiUcz7oWydPnvJLE5EuooL5/94u2vYnSpAI6mJZlf7Vq1doaWrmHihdmPg6wWVSqUZ5N8wC3L4dgP2WhP89sIEiT+Tg/WSBY40kWePi3UuTVLkS4U04g01PJqXLKThcCSSKyBMfUfwUMY9H0T9KEIt3tnfDy01Lh0iKJrS3vcTwyHuzLfbayoqxquUXX/ZxDP3wE2iDdsoanMtzcH5bpFT5SKmShA0SxZGQRaniMVJFeBKNCpgSJPSRdSxPzM3NGWP7RWsrXne+4hbYH7Ewv2h2yxJJEb7lUGWJbg5+h0gVLxyrVMMoVbA8A8R8IEnSsEnDfpO2CmLEAyY3R4+logTxdbll/h2j96mNpGjl6x138Z2ensS3b9983iga3QeTFsGbR2qYG0QBk9QUkRUO7wo2vd9ImDk4Fj5hg65iRwLtFA/VsLhUsCLU1HxEEevGX4Lvm+xjqyhBfD16ov+u0uju7OxEU2OTWTB7bOwDpYUY3ausF4ft9gY/R1PN3Y3vLXuFe6aAL9faMjZWpuGYH6Xnix4wGvagYQ9XrPGAiU3jU8Mk/8tQ7Wgqe8ylKkGOGfDAr/v69Ss6X79CM+2Lnu5ufP3ylS5aumK56ahRowJdUYEPHuu5TzaIlHCuU6qsrxoPmHPxo5EqPqJkUqokUe1zGeOfrjLW0PfcsVb1CL5MCXIEoAYrUjbk6e9/R1I0o43xi9HR95idmYFIEbkmKtRRqFHB6rTfa6JIOWh/SPrj5tqKT6osTTFSP4aN+FO0VcSwTzdxFaNksT3y/p0qkad6KUH2OzoOed8Cc6JEjWptbsarjj/x5fNnLCyI0b2+7aL1uWkP+UVH/LioT75ja/BvUA1cnoJ7ZRaY/4R1EgWeDDjFXpEUF94u6lfkUcPXSiXIEQ8oMbpFhWp/2YaBgX5MTdLopot2g7/EEum2qrTYPyw+wtBZTBVsGa6FFXiXJ+jxSoRDPF8eesCMVIn3kYSeskg6lCBH0FvL3ONQ9mhvbmxEJwN7okZJXlRgpFv2SrTT4STh/VLCzcCl2CpYnQcWvzAImUSDfisIyWg9JLNYXMWULFY/lCBh7CExul+/6jDeqL6+XkzQ6F5eWfpBpDuMX2yBomg9sRa+AW+cvszt2mSQ07GxQLIswkE1zDk3aqSJL1pPT1gMpQofkfiLHH/1pklZfnXOXD6Rf5Qgh4RdsmVFWrS2tJhI9+iHUcxOz0DypUTzFkkR+WrUfkAKlAa+c9/wFsOez2+uwvGNuWKrC3AsMrM4VjKLz1AFo7uY55tmvopIIb/K5qPHSVNECbKfvt/lntnZGXR3daGFxHhNNerLR0a6lxgrYMxAogDGTWuBX8Bdqn5CH23RZZP4MKnSS5exY2UGzvkxeGmrOCWz2M18MEodn+yQ8KVIpZOliBIkxOHy4cMHY3S/aG3B8NAQpqemtoxucdGyS21mW4QIz563+yWEi2qVJFmCEXsH01rWp0YR4zmNPM9FQwmfynay5JDGKEH27FJ6MZeWzB7qLZyh9+eff2KcapS4bdfXJb2cv3GiRm27P/dRYBTfsiVHTMxng9JCVFTZRbi84hpq6+tx/Ua1QUeksBUOJUiQXpjk5CPJiWptacJb2hmTk1Mki2+WnnUi3UEaYMFLEgxdX2fqisuNgvPnUFNbh+rqGpw7dw5p6elITEy0VK0Zw4kAX9sxQiadNzAwwPTyRiMtRI2am53dyovySYtjrI5tvsrL9BmRFrK1dknpFTTcvsm96MuQnZON1NRTiImJsWRbVYJsdcssSSCR7sZnzzlbrxefP44zdrEUEOm2V9wi3KPRP5Xdlw3sK90vLUT9zMzORsW1a7h9+w4uFxbi9OnT8CRtzTUJd2XCWF7US5CR4RGqUM14+fIFhgcHMUmje+3b6nak+6S9KGHs62MrSiSFSOKEhERcLipEfV0DrldeRxZJkk5ixMVtzSs5thod/IuikiAS1W5va8PzZ3+YBQ9mhBTsUIlaGdNQDe6QR5SRFlSjNkmOzKws1NTU4e69e7haXkaiJBhSREKu2c6GRxVBJEHwyaNHePb8OScjvTUGt3Soz+9OaLaIsf33TrT0739CYIOrp4g3z+WOQXFREe4+eIAGeqNEpRJiWNW2+KeG/OAD2xNEZuP19vTg4W8P0fFnOz6Nj2GVgSr5xVNp8YNR8aOP+cshmImdsS5GN18pqSnGC3Xn/gOUlZXTZZtKaRFvm+wB2xrp09PTJv3j4T/+QRdtH+dczBoviqR/SCdHorj/0bg9vs838W2NkXCXA+fyC3Dzzl3cvnsH58+fN9IiNpazC2122EqCiHEoM/Manz/jvIsWZtGObi+iJv3m06CEHnqEgoCXuHppo8UnelBeVoYHv/yCyqpKnE4/jXiqUS6XWf03lCIj5l5bSRBRp2SVwX/8329cTO29UaNi3O6tFUDEstBjvwiICrrGyVxioGVmZjKgV4/7D+6j9MoVJJIUsfRERYMUtpUEkU6VFBBZUK2t7QUePXyIt31v+Nk8hChO18knv+13gJ7Ufcbo5mIRQoDComI8IClq6xtwhiSRKLebOEbTYSuC+DtOiCLSxJ9DJauFiEt3nME/WbPWSJUtj5X/mWh/F6Nb1Kj0jNO4fr0StxjQq6qqQnJKinHRRkfK/j+PAlsSJLCZErBa4RRXkSodHe14/Ntv6OzuwRIljfwauoxUCXzCaBXGkP/rp5H9126ua6NG0aMnq5GcZy7U7Tt3cPf+XeTRAI+Pj4+ogN5R9Y7tCeIHTgbDKqXKPIkx8K4fjcy1ev77U4xxHoeY7W4amtGgUwseYnSvkxjxnkRcZxbtvQc/46fKSmRkZNAbJS5a+xrd/vGw3/eoIUggINtSZeKrWUxBgodd9H4tLVKqMGnOJXM67ObsoghZlWwBHlmZWWi4dZOR7rsoKi6h0Z1ImyM2an4gAsfCXudRSRA/KH5bZYnzPSSdXSLsLc8baatwUTRuESBR4EiXKmJ0ywqNkv90ubAI9xnQq62vYxZtjoldRJvR7e/7/b5HNUECQTJShauRSLKiLNPTRKJ0db42HjAXbRVRwSLpMJHudS9OnU5nFu113Lt/DzdodCclJ0e10R1qHypBdiAmUkWMennJ4tGNjc/QTLK85yxCyduytAeM0mKVeVFOTka6wMlIJtJ96zbOFpz1RbopRfQIDQElSBC8tm0ViaswHf6PP55SqnSZhaWtJFX8RreH0qG8vBz37t5HZXUV51xkGG+UnSPdQbovLJeUIPuA0W+ryIJwg4P9ePL4CZo5sUo8YNtShQs2BB67uVUDrx/8fKtkSro1qlCSWyZG981bt3Dv5/u4fLnISAuxOSLdfjo4RuF7UgkSIpYSTBOifKVUedXRgcePfkNvby/mueGNy+2C64hdpJJvtkY1KjY2DiUlJbQtfkZtbc12erka3SF26B63K0H2AOhHl/1xlSWSReat//70iTHsZeE4SQOP4fwIxw6p8qOy9vpcvmtdEgaZGyUJgje4yIEkDJYxcdDj8ajRvReAh7iuBDkEeP5HZUECkSq+TTY7jArWyb3K/VLloB4wIYas5yuTkQpoaN9lXtQtGt35+WdNXlSkT0by42fldyVIGHvHSBUuOSo5YP1cGaWZ0frfnzyBLDYn1/brATNGN9Wo5KQUlFVU4GeTXl7F1T9SkcAUEGeEuZzDCPGxF6UEOSLIxQMm2xzI2lqydfOTx4/43mE8YL4csB1xFWN0rxujOy83D3UNDbQvHtDovowEZtFG0kIHRwTpiRSrBDli2LelClUwmdnY1NiMZ8+YWcx9QzZoU4i7WPKiZJpqcUkxkwWZXl5XjywufCBzutXoPuIO2qN4JcgeAIXzsj+uIpvovOISpo+pfvW/e2cSBSUFpKy8jAurJanRHU7QD1mWEuSQAB7k8UCpMsE9RWTGnqhRanQfBM2jfUYJcrT47lm6xDWidTLSnuBY4AYliAU6QatgXQR0wVnr9o3WzAIIKEEs0AlaBesioASxbt9ozSyAgBLEAp2gVbAuAkoQ6/aN1swCCChBLNAJWgXrIqAEsW7faM0sgIASxAKdoFWwLgJKEOv2jdbMAggoQSzQCVoF6yKgBLFu32jNLICAEsQCnaBVsC4CShDr9o3WzAIIKEEs0AlaBesioASxbt9ozSyAgBLEAp2gVbAuAv8Psao0n5aARi8AAAAASUVORK5CYII=" style="width:80px;height:auto;margin-bottom:16px;" alt="佐藤眼科グループ ロゴ">
+    <div style="font-size:13px;color:#4a6274;letter-spacing:6px;font-weight:300;">SATO EYE CLINIC GROUP</div>
+    <div style="font-size:22px;font-weight:700;color:#3a3a3a;margin-top:4px;letter-spacing:3px;">佐藤眼科グループ</div>
+    <div style="margin-top:12px;height:1px;width:60px;background:linear-gradient(90deg,transparent,#4a7fa5,transparent);margin-left:auto;margin-right:auto;"></div>
+    <div style="font-size:28px;color:#3a3a3a;margin-top:16px;letter-spacing:4px;font-weight:700;">学会出張報告書</div>
+  </div>
+  <div class="top-menu">
+    <button class="menu-btn menu-btn-new" onclick="showScreen('screen-form')">新規作成</button>
+    <button class="menu-btn menu-btn-past" onclick="loadPastReports()">過去の報告</button>
+  </div>
+</div>
+
+<!-- New Report Form -->
+<div id="screen-form" class="screen">
+  <button class="back-btn" onclick="showScreen('screen-top')">← 戻る</button>
+  <h1>新規作成</h1>
+
+  <div class="card">
+    <label style="font-weight:bold;font-size:14px;margin-top:0;">学会名</label>
+    <input type="text" id="gakkai" placeholder="学会名を入力">
+    <label style="font-weight:bold;font-size:14px;">報告者名</label>
+    <input type="text" id="reporter" placeholder="報告者名を入力">
+  </div>
+
+  <div class="card">
+    <h2>学会日程</h2>
+    <div class="date-row">
+      <input type="date" id="gakkaiFrom">
+      <span>〜</span>
+      <input type="date" id="gakkaiTo">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>参加日程</h2>
+    <div class="checkbox-row">
+      <input type="checkbox" id="sameDate" onchange="toggleSameDate()">
+      <label for="sameDate">学会日程と同じ</label>
+    </div>
+    <div id="sankaDateRow" style="margin-top:8px;">
+      <div class="date-row">
+        <input type="date" id="sankaFrom">
+        <span>〜</span>
+        <input type="date" id="sankaTo">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>報告内容</h2>
+    <div class="toolbar">
+      <span style="font-size:12px;color:#666;">太字:</span><button onmousedown="event.preventDefault()" onclick="execBold()"><b>B</b></button>
+      <input type="color" id="textColor" value="#000000">
+      <button onmousedown="event.preventDefault()" onclick="execColor()">色を適用</button>
+    </div>
+    <div id="content-editor" contenteditable="true" oninput="updateCharCount()"></div>
+    <div class="char-counter" id="charCounter">0 / 650</div>
+  </div>
+
+  <div class="card">
+    <button class="btn btn-primary" onclick="showPreview()">プレビュー</button>
+  </div>
+</div>
+
+<!-- Past Reports -->
+<div id="screen-past" class="screen">
+  <button class="back-btn" onclick="showScreen('screen-top')">← 戻る</button>
+  <h1>過去の報告</h1>
+  <div class="card" id="past-list">
+    <div class="loading">読み込み中...</div>
+  </div>
+</div>
+
+<!-- View Report -->
+<div id="screen-view" class="screen">
+  <button class="back-btn no-print" id="viewBackBtn" onclick="showScreen('screen-past');loadPastReports();">← 戻る</button>
+  <div id="view-report"></div>
+  <div class="no-print" id="viewActions" style="margin-top:16px;display:none;">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="editReport()">修正</button>
+      <button class="btn btn-outline" onclick="printFromView()">印刷</button>
+      <button class="btn btn-danger" onclick="deleteReport()">削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal-content">
+    <div id="preview-report"></div>
+    <div class="no-print" style="margin-top:16px;">
+      <button class="btn btn-secondary" onclick="saveReport()">保存・URL発行</button>
+      <button class="btn btn-outline" onclick="closePreview()" style="margin-top:8px;">修正</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal-content" style="max-width:500px;">
+    <h2 style="text-align:center;margin-bottom:12px;">保存しました</h2>
+    <p style="text-align:center;font-size:13px;color:#666;margin-bottom:12px;">このURLを共有すると、相手が報告書を閲覧できます</p>
+    <div class="share-box">
+      <input type="text" class="share-url" id="shareUrl" readonly onclick="copyShareUrl()">
+    </div>
+    <button class="btn btn-secondary" onclick="copyShareUrl()" style="margin-top:10px;">URLをコピーする</button>
+    <button class="btn btn-outline" onclick="closeShare()" style="margin-top:6px;">トップに戻る</button>
+  </div>
+</div>
+
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyCw8kbHQXd2PpsnltI1yOv90_bBhmhTvPg",
+  authDomain: "business-trip-report-e9027.firebaseapp.com",
+  projectId: "business-trip-report-e9027",
+  storageBucket: "business-trip-report-e9027.firebasestorage.app",
+  messagingSenderId: "332660906920",
+  appId: "1:332660906920:web:e9b0196d47c2b7c6345b9d"
+});
+var db = firebase.firestore();
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function toggleSameDate() {
+  var same = document.getElementById('sameDate').checked;
+  document.getElementById('sankaDateRow').style.display = same ? 'none' : 'block';
+  if (same) {
+    document.getElementById('sankaFrom').value = document.getElementById('gakkaiFrom').value;
+    document.getElementById('sankaTo').value = document.getElementById('gakkaiTo').value;
+  }
+}
+
+function execBold() {
+  document.execCommand('bold', false, null);
+  document.getElementById('content-editor').focus();
+}
+
+function execColor() {
+  var color = document.getElementById('textColor').value;
+  document.execCommand('foreColor', false, color);
+  document.getElementById('content-editor').focus();
+}
+
+function updateCharCount() {
+  var el = document.getElementById('content-editor');
+  var len = el.innerText.length;
+  var counter = document.getElementById('charCounter');
+  counter.textContent = len + ' / 650';
+  counter.className = 'char-counter' + (len > 650 ? ' over' : '');
+}
+
+function getFormData() {
+  var same = document.getElementById('sameDate').checked;
+  return {
+    gakkai: document.getElementById('gakkai').value,
+    reporter: document.getElementById('reporter').value,
+    gakkaiFrom: document.getElementById('gakkaiFrom').value,
+    gakkaiTo: document.getElementById('gakkaiTo').value,
+    sankaFrom: same ? document.getElementById('gakkaiFrom').value : document.getElementById('sankaFrom').value,
+    sankaTo: same ? document.getElementById('gakkaiTo').value : document.getElementById('sankaTo').value,
+    content: document.getElementById('content-editor').innerHTML
+  };
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  var parts = d.split('-');
+  return parts[0] + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
+}
+
+function renderReport(data) {
+  var gakkaiDates = formatDate(data.gakkaiFrom) + ' 〜 ' + formatDate(data.gakkaiTo);
+  var sankaDates = formatDate(data.sankaFrom) + ' 〜 ' + formatDate(data.sankaTo);
+  return '<div class="report-render">' +
+    '<div class="report-title">出張報告書</div>' +
+    '<table>' +
+    '<tr><td class="lbl" style="width:11%;">学会名</td><td class="val" colspan="3">' + escHtml(data.gakkai) + '</td></tr>' +
+    '<tr><td class="lbl">学会日程</td><td class="date-val" style="width:50%;white-space:nowrap;">' + gakkaiDates + '</td>' +
+    '<td class="lbl" style="width:10%;">報告者名</td><td class="val" style="width:29%;">' + escHtml(data.reporter) + '</td></tr>' +
+    '<tr><td class="lbl">参加日程</td><td class="date-val" style="white-space:nowrap;">' + sankaDates + '</td>' +
+    '<td class="lbl">業種</td><td class="val">視能訓練士</td></tr>' +
+    '</table>' +
+    '<div class="report-body">' + data.content + '</div>' +
+    '</div>';
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function showPreview() {
+  var data = getFormData();
+  document.getElementById('preview-report').innerHTML = renderReport(data);
+  document.getElementById('previewModal').classList.add('show');
+  autoFitCells(document.getElementById('preview-report'));
+}
+
+function closePreview() {
+  document.getElementById('previewModal').classList.remove('show');
+}
+
+function openPdfTab() {
+  var data = getFormData();
+  openReportPage(data, 'pdf');
+}
+
+function printFromView() {
+  if (window._currentViewData) {
+    openReportPage(window._currentViewData, 'print');
+  }
+}
+
+function openReportPage(data, mode) {
+  var bannerText = '';
+  if (mode === 'print') {
+    bannerText = '🖨 印刷方法：ブラウザの共有ボタン（□↑）→「プリント」を選択してください';
+  } else {
+    bannerText = '📱 PDF保存：共有ボタン（□↑）→「プリント」→ プレビューをピンチアウト → 共有 →「"ファイル"に保存」';
+  }
+
+  var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>出張報告書</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0;}' +
+    'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;}' +
+    '.action-banner{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:12px;margin:10px;font-size:14px;text-align:center;line-height:1.6;}' +
+    '.print-page{width:190mm;padding:8mm 10mm;margin:0 auto;}' +
+    '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;}' +
+    '.report-render table{width:100%;border-collapse:collapse;margin-bottom:0;border:2px solid #000;}' +
+    '.report-render table td{border:1px solid #000;padding:3px 4px;vertical-align:middle;white-space:nowrap;}' +
+    '.report-render table td.lbl{font-size:7pt;font-weight:bold;background:#f9f9f9;}' +
+    '.report-render table td.date-val{font-size:6pt;}' +
+    '.report-render table td.val{font-size:8pt;}' +
+    '.report-render .report-body{font-size:10pt;line-height:1.6;border:2px solid #000;border-top:none;padding:8px 10px;overflow:hidden;}' +
+    '@media print{.action-banner{display:none!important;}' +
+    '@page{size:A4 portrait;margin:12mm 10mm 18mm 10mm;}' +
+    '.print-page{width:100%!important;padding:0!important;margin:0!important;}' +
+    '.report-render .report-body{height:calc(267mm - 45mm);overflow:hidden!important;}}' +
+    '</style></head><body>' +
+    '<div class="action-banner">' + bannerText + '</div>' +
+    '<div class="print-page">' + renderReport(data) + '</div>' +
+    '<script>' +
+    'setTimeout(function(){' +
+    '  var body=document.querySelector(".report-body");' +
+    '  if(body){' +
+    '    body.style.height="calc(267mm - 45mm)";' +
+    '    var s=parseFloat(getComputedStyle(body).fontSize);' +
+    '    var n=0;' +
+    '    while(body.scrollHeight>body.clientHeight+1&&s>4&&n<300){s-=0.2;body.style.fontSize=s+"px";n++;}' +
+    '  }' +
+    '},100);' +
+    '<\/script>' +
+    '</body></html>';
+  var w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
+function autoFitCells(container) {
+  if (!container) return;
+  var cells = container.querySelectorAll('td');
+  cells.forEach(function(td) {
+    if (td.classList.contains('lbl')) return;
+    var orig = parseFloat(window.getComputedStyle(td).fontSize);
+    var size = orig;
+    while (td.scrollWidth > td.clientWidth && size > 4) {
+      size -= 0.5;
+      td.style.fontSize = size + 'px';
+    }
+  });
+}
+
+async function saveReport() {
+  var data = getFormData();
+  if (!data.gakkai || !data.reporter) {
+    alert('学会名と報告者名は必須です');
+    return;
+  }
+  try {
+    var id;
+    if (window._editingId) {
+      id = window._editingId;
+      data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('reports').doc(id).update(data);
+      window._editingId = null;
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      var ref = await db.collection('reports').add(data);
+      id = ref.id;
+    }
+    closePreview();
+    var url = 'https://beautiful-platypus-fea9af.netlify.app?view=' + id;
+    document.getElementById('shareUrl').value = url;
+    document.getElementById('shareModal').classList.add('show');
+  } catch (e) {
+    alert('保存に失敗しました: ' + e.message);
+  }
+}
+
+function copyShareUrl() {
+  var input = document.getElementById('shareUrl');
+  input.select();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(input.value).then(function() {
+      alert('URLをコピーしました');
+    });
+  } else {
+    document.execCommand('copy');
+    alert('URLをコピーしました');
+  }
+}
+
+function closeShare() {
+  document.getElementById('shareModal').classList.remove('show');
+  showScreen('screen-top');
+}
+
+async function loadPastReports() {
+  showScreen('screen-past');
+  var list = document.getElementById('past-list');
+  list.innerHTML = '<div class="loading">読み込み中...</div>';
+  try {
+    var snap = await db.collection('reports').orderBy('createdAt', 'desc').get();
+    if (snap.empty) {
+      list.innerHTML = '<div class="loading">報告書がありません</div>';
+      return;
+    }
+    var html = '';
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      var dateStr = d.gakkaiFrom ? formatDate(d.gakkaiFrom) : '';
+      html += '<div class="report-list-item" onclick="viewReport(\'' + doc.id + '\')">' +
+        '<div class="title">' + escHtml(d.gakkai) + '</div>' +
+        '<div class="meta">' + escHtml(d.reporter) + ' ・ ' + dateStr + '</div></div>';
+    });
+    list.innerHTML = html;
+  } catch (e) {
+    list.innerHTML = '<div class="loading">読み込みに失敗しました</div>';
+  }
+}
+
+async function viewReport(id) {
+  showScreen('screen-view');
+  document.getElementById('view-report').innerHTML = '<div class="loading">読み込み中...</div>';
+  document.getElementById('viewActions').style.display = 'none';
+  window._currentViewId = id;
+  try {
+    var doc = await db.collection('reports').doc(id).get();
+    if (!doc.exists) {
+      document.getElementById('view-report').innerHTML = '<div class="loading">報告書が見つかりません</div>';
+      return;
+    }
+    var data = doc.data();
+    window._currentViewData = data;
+    document.getElementById('view-report').innerHTML = renderReport(data);
+    autoFitCells(document.getElementById('view-report'));
+    document.getElementById('viewActions').style.display = 'flex';
+  } catch (e) {
+    document.getElementById('view-report').innerHTML = '<div class="loading">読み込みに失敗しました</div>';
+  }
+}
+
+function editReport() {
+  var data = window._currentViewData;
+  if (!data) return;
+  showScreen('screen-form');
+  document.getElementById('gakkai').value = data.gakkai || '';
+  document.getElementById('reporter').value = data.reporter || '';
+  document.getElementById('gakkaiFrom').value = data.gakkaiFrom || '';
+  document.getElementById('gakkaiTo').value = data.gakkaiTo || '';
+  document.getElementById('sankaFrom').value = data.sankaFrom || '';
+  document.getElementById('sankaTo').value = data.sankaTo || '';
+  document.getElementById('content-editor').innerHTML = data.content || '';
+  document.getElementById('sameDate').checked = false;
+  document.getElementById('sankaDateRow').style.display = 'block';
+  updateCharCount();
+  window._editingId = window._currentViewId;
+}
+
+async function deleteReport() {
+  if (!window._currentViewId) return;
+  if (!confirm('この報告書を削除しますか？')) return;
+  try {
+    await db.collection('reports').doc(window._currentViewId).delete();
+    alert('削除しました');
+    loadPastReports();
+  } catch (e) {
+    alert('削除に失敗しました: ' + e.message);
+  }
+}
+
+// Handle ?view=ID
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var viewId = params.get('view');
+  if (viewId) {
+    document.getElementById('viewBackBtn').style.display = 'none';
+    viewReport(viewId);
+  }
+})();
+</script>
+</body>
+</html>
