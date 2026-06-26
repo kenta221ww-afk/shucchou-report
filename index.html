@@ -579,7 +579,8 @@ async function deleteReport() {
   var params = new URLSearchParams(window.location.search);
   var viewId = params.get('view');
   if (viewId) {
-    document.getElementById('viewBackBtn').style.display = 'none';
+    document.getElementById('viewBackBtn').textContent = '← トップ画面';
+    document.getElementById('viewBackBtn').onclick = function() { window.location.href = window.location.pathname; };
     viewReport(viewId);
   }
 })();
