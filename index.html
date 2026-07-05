@@ -430,9 +430,9 @@ function openReportPage(data, mode) {
     'setTimeout(function(){' +
     '  var body=document.querySelector(".report-body");' +
     '  if(!body)return;' +
-    '  var s=parseFloat(getComputedStyle(body).fontSize);' +
-    '  var n=0;' +
-    '  while(body.scrollHeight>body.clientHeight+2&&s>8&&n<200){s-=0.5;body.style.fontSize=s+"px";n++;}' +
+    '  var s=28;' +
+    '  body.style.fontSize=s+"px";' +
+    '  while(body.scrollHeight>body.clientHeight+2&&s>8){s-=0.5;body.style.fontSize=s+"px";}' +
     '},300);' +
     '<\/script>' +
     '</body></html>';
