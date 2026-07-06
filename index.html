@@ -428,12 +428,20 @@ function openReportPage(data, mode) {
     '<div class="print-page">' + renderReport(data) + '</div>' +
     '<script>' +
     'setTimeout(function(){' +
+    '  var page=document.querySelector(".print-page");' +
+    '  var title=document.querySelector(".report-title");' +
+    '  var tbl=document.querySelector(".report-render table");' +
     '  var body=document.querySelector(".report-body");' +
-    '  if(!body)return;' +
-    '  var s=28;' +
+    '  if(!body||!page)return;' +
+    '  var pageH=page.clientHeight;' +
+    '  var titleH=title?title.offsetHeight:0;' +
+    '  var tblH=tbl?tbl.offsetHeight:0;' +
+    '  var availH=pageH-titleH-tblH-8;' +
+    '  if(availH>50){body.style.height=availH+"px";body.style.flex="none";}' +
+    '  var s=36;' +
     '  body.style.fontSize=s+"px";' +
     '  while(body.scrollHeight>body.clientHeight+2&&s>8){s-=0.5;body.style.fontSize=s+"px";}' +
-    '},300);' +
+    '},400);' +
     '<\/script>' +
     '</body></html>';
   var w = window.open('', '_blank');
