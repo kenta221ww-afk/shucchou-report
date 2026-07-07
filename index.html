@@ -408,40 +408,34 @@ function openReportPage(data, mode) {
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>出張報告書</title><style>' +
     '*{box-sizing:border-box;margin:0;padding:0;}' +
-    'html,body{height:100%;font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;}' +
+    'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;}' +
     '.action-banner{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:12px;margin:10px;font-size:14px;text-align:center;line-height:1.6;}' +
-    '.print-page{width:190mm;height:257mm;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;}' +
-    '.report-render{display:flex;flex-direction:column;height:100%;}' +
-    '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;flex-shrink:0;}' +
-    '.report-render table{width:100%;border-collapse:collapse;border:2px solid #000;flex-shrink:0;}' +
+    '.print-page{width:190mm;margin:0 auto;}' +
+    '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;}' +
+    '.report-render table{width:100%;border-collapse:collapse;border:2px solid #000;}' +
     '.report-render table td{border:1px solid #000;padding:4px 5px;vertical-align:middle;white-space:nowrap;}' +
     '.report-render table td.lbl{font-size:14pt;font-weight:bold;background:#f9f9f9;}' +
     '.report-render table td.date-val{font-size:10pt;}' +
     '.report-render table td.val{font-size:14pt;}' +
-    '.report-render .report-body{font-size:14pt;line-height:1.8;border:2px solid #000;border-top:none;padding:10px 12px;flex:1;overflow:hidden;}' +
+    '.report-render .report-body{font-size:14pt;line-height:1.8;border:2px solid #000;border-top:none;padding:10px 12px;overflow:hidden;}' +
     '@media print{.action-banner{display:none!important;}' +
-    '@page{size:A4 portrait;margin:10mm 10mm 30mm 10mm;}' +
-    'html,body{height:auto!important;}' +
-    '.print-page{width:190mm!important;height:247mm!important;margin:0!important;}}' +
+    '@page{size:A4 portrait;margin:10mm 10mm 20mm 10mm;}}' +
     '</style></head><body>' +
     '<div class="action-banner">' + bannerText + '</div>' +
     '<div class="print-page">' + renderReport(data) + '</div>' +
     '<script>' +
-    'setTimeout(function(){' +
-    '  var page=document.querySelector(".print-page");' +
-    '  var title=document.querySelector(".report-title");' +
-    '  var tbl=document.querySelector(".report-render table");' +
+    'function fitFont(){' +
     '  var body=document.querySelector(".report-body");' +
-    '  if(!body||!page)return;' +
-    '  var pageH=page.clientHeight;' +
-    '  var titleH=title?title.offsetHeight:0;' +
-    '  var tblH=tbl?tbl.offsetHeight:0;' +
-    '  var availH=pageH-titleH-tblH-8;' +
-    '  if(availH>50){body.style.height=availH+"px";body.style.flex="none";}' +
-    '  var s=36;' +
+    '  if(!body)return;' +
+    '  var bodyHeightMm=207;' +
+    '  body.style.overflow="hidden";' +
+    '  body.style.height=bodyHeightMm+"mm";' +
+    '  var s=48;' +
     '  body.style.fontSize=s+"px";' +
     '  while(body.scrollHeight>body.clientHeight+2&&s>8){s-=0.5;body.style.fontSize=s+"px";}' +
-    '},400);' +
+    '}' +
+    'window.onbeforeprint=fitFont;' +
+    'setTimeout(fitFont,300);' +
     '<\/script>' +
     '</body></html>';
   var w = window.open('', '_blank');
