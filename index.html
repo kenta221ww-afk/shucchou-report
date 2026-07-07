@@ -404,14 +404,6 @@ function openReportPage(data, mode) {
     bannerText = '📱 PDF保存：共有ボタン（□↑）→「プリント」→ プレビューをピンチアウト → 共有 →「"ファイル"に保存」';
   }
 
-  // 文字数からフォントサイズをptで計算（A4印刷レイアウト基準）
-  // 利用可能面積: 幅184mm × 高209mm（余白・タイトル・テーブル除く）
-  // F pt = sqrt(184*209 / (文字幅mm*行高mm) / 文字数)
-  var rawText = (data.content || '').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/gi, 'x');
-  var charCount = Math.max(rawText.length, 30);
-  var fpt = Math.sqrt(171080 / charCount);
-  fpt = Math.min(30, Math.max(10, Math.round(fpt * 2) / 2));
-
   var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>出張報告書</title><style>' +
@@ -425,12 +417,30 @@ function openReportPage(data, mode) {
     '.report-render table td.lbl{font-size:14pt;font-weight:bold;background:#f9f9f9;}' +
     '.report-render table td.date-val{font-size:10pt;}' +
     '.report-render table td.val{font-size:14pt;}' +
-    '.report-render .report-body{font-size:' + fpt + 'pt;line-height:1.8;border:2px solid #000;border-top:none;padding:10px 12px;overflow:hidden;}' +
+    '.report-render .report-body{font-size:14pt;line-height:1.8;border:2px solid #000;border-top:none;padding:10px 12px;overflow:hidden;height:225mm;}' +
     '@media print{.action-banner{display:none!important;}' +
     '@page{size:A4 portrait;margin:10mm 10mm 20mm 10mm;}}' +
     '</style></head><body>' +
     '<div class="action-banner">' + bannerText + '</div>' +
     '<div class="print-page">' + renderReport(data) + '</div>' +
+    '<script>' +
+    'function fitFont(){' +
+    '  var body=document.querySelector(".report-body");' +
+    '  if(!body)return;' +
+    '  var tmp=document.createElement("div");' +
+    '  tmp.style.cssText="position:fixed;visibility:hidden;top:-9999px;left:0;width:184mm;line-height:1.8;padding:10px 12px;box-sizing:border-box;word-break:break-word;font-family:Meiryo,\'Hiragino Kaku Gothic ProN\',sans-serif;";' +
+    '  tmp.innerHTML=body.innerHTML;' +
+    '  document.body.appendChild(tmp);' +
+    '  var availPx=225*96/25.4;' +
+    '  var s=48;' +
+    '  tmp.style.fontSize=s+"pt";' +
+    '  while(tmp.offsetHeight>availPx&&s>8){s-=0.5;tmp.style.fontSize=s+"pt";}' +
+    '  document.body.removeChild(tmp);' +
+    '  body.style.fontSize=s+"pt";' +
+    '}' +
+    'window.onbeforeprint=fitFont;' +
+    'setTimeout(fitFont,400);' +
+    '<\/script>' +
     '</body></html>';
   var w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
