@@ -425,11 +425,17 @@ function openReportPage(data, mode) {
     '<div class="print-page">' + renderReport(data) + '</div>' +
     '<script>' +
     'function fitFont(){' +
+    '  var title=document.querySelector(".report-title");' +
+    '  var tbl=document.querySelector(".report-render table");' +
     '  var body=document.querySelector(".report-body");' +
     '  if(!body)return;' +
-    '  var bodyHeightMm=207;' +
+    '  var pxPerMm=96/25.4;' +
+    '  var printH=(297-10-20)*pxPerMm;' +
+    '  var titleH=title?title.offsetHeight:0;' +
+    '  var tblH=tbl?tbl.offsetHeight:0;' +
+    '  var availH=Math.floor(printH-titleH-tblH-4);' +
+    '  body.style.height=availH+"px";' +
     '  body.style.overflow="hidden";' +
-    '  body.style.height=bodyHeightMm+"mm";' +
     '  var s=48;' +
     '  body.style.fontSize=s+"px";' +
     '  while(body.scrollHeight>body.clientHeight+2&&s>8){s-=0.5;body.style.fontSize=s+"px";}' +
