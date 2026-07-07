@@ -425,23 +425,27 @@ function openReportPage(data, mode) {
     '<div class="print-page">' + renderReport(data) + '</div>' +
     '<script>' +
     'function fitFont(){' +
-    '  var title=document.querySelector(".report-title");' +
-    '  var tbl=document.querySelector(".report-render table");' +
+    '  var titleEl=document.querySelector(".report-title");' +
+    '  var tblEl=document.querySelector(".report-render table");' +
     '  var body=document.querySelector(".report-body");' +
     '  if(!body)return;' +
     '  var pxPerMm=96/25.4;' +
-    '  var printH=(297-10-20)*pxPerMm;' +
-    '  var titleH=title?title.offsetHeight:0;' +
-    '  var tblH=tbl?tbl.offsetHeight:0;' +
-    '  var availH=Math.floor(printH-titleH-tblH-4);' +
+    '  var availH=Math.floor((267)*pxPerMm-(titleEl?titleEl.offsetHeight:0)-(tblEl?tblEl.offsetHeight:0)-4);' +
     '  body.style.height=availH+"px";' +
     '  body.style.overflow="hidden";' +
+    '  var w=body.clientWidth;' +
+    '  var tmp=document.createElement("div");' +
+    '  tmp.style.cssText="position:absolute;visibility:hidden;top:0;left:0;width:"+w+"px;line-height:1.8;padding:10px 12px;box-sizing:border-box;word-break:break-word;white-space:pre-wrap;font-family:inherit;";' +
+    '  tmp.innerHTML=body.innerHTML;' +
+    '  document.body.appendChild(tmp);' +
     '  var s=48;' +
+    '  tmp.style.fontSize=s+"px";' +
+    '  while(tmp.offsetHeight>availH&&s>8){s-=0.5;tmp.style.fontSize=s+"px";}' +
+    '  document.body.removeChild(tmp);' +
     '  body.style.fontSize=s+"px";' +
-    '  while(body.scrollHeight>body.clientHeight+2&&s>8){s-=0.5;body.style.fontSize=s+"px";}' +
     '}' +
     'window.onbeforeprint=fitFont;' +
-    'setTimeout(fitFont,300);' +
+    'setTimeout(fitFont,400);' +
     '<\/script>' +
     '</body></html>';
   var w = window.open('', '_blank');
