@@ -511,6 +511,8 @@ function closeShare() {
   showScreen('screen-top');
 }
 
+var _reportsCache = {};
+
 async function loadPastReports() {
   showScreen('screen-past');
   var list = document.getElementById('past-list');
@@ -524,6 +526,7 @@ async function loadPastReports() {
     var html = '';
     snap.forEach(function(doc) {
       var d = doc.data();
+      _reportsCache[doc.id] = d;
       var dateStr = d.gakkaiFrom ? formatDate(d.gakkaiFrom) : '';
       html += '<div class="report-list-item" onclick="viewReport(\'' + doc.id + '\')">' +
         '<div class="title">' + escHtml(d.gakkai) + '</div>' +
@@ -537,9 +540,17 @@ async function loadPastReports() {
 
 async function viewReport(id) {
   showScreen('screen-view');
-  document.getElementById('view-report').innerHTML = '<div class="loading">読み込み中...</div>';
   document.getElementById('viewActions').style.display = 'none';
   window._currentViewId = id;
+  if (_reportsCache[id]) {
+    var data = _reportsCache[id];
+    window._currentViewData = data;
+    document.getElementById('view-report').innerHTML = renderReport(data);
+    autoFitCells(document.getElementById('view-report'));
+    document.getElementById('viewActions').style.display = 'flex';
+    return;
+  }
+  document.getElementById('view-report').innerHTML = '<div class="loading">読み込み中...</div>';
   try {
     var doc = await db.collection('reports').doc(id).get();
     if (!doc.exists) {
@@ -547,6 +558,7 @@ async function viewReport(id) {
       return;
     }
     var data = doc.data();
+    _reportsCache[id] = data;
     window._currentViewData = data;
     document.getElementById('view-report').innerHTML = renderReport(data);
     autoFitCells(document.getElementById('view-report'));
