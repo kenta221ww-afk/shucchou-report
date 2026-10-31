@@ -26,9 +26,14 @@
   }
   label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; margin-top: 10px; }
   label:first-child { margin-top: 0; }
-  input[type="text"], input[type="date"] {
+  input[type="text"], input[type="date"], select {
     width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;
     font-size: 16px; -webkit-appearance: none; appearance: none; background: #fafafa;
+    color: #333;
+  }
+  select {
+    background: #fafafa url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='2' fill='none'/%3E%3C/svg%3E") no-repeat right 12px center;
+    padding-right: 32px;
   }
   input[type="date"] { font-size: 14px; }
 
@@ -172,6 +177,20 @@
   }
 
   .loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
+
+  /* A4の1枚を画面幅に縮小して見せる（中身は印刷用ページと同じ） */
+  .sheet-wrap {
+    position: relative; width: 100%; overflow: hidden; background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+  }
+  .sheet-frame {
+    position: absolute; top: 0; left: 0; width: 210mm; height: 297mm;
+    border: 0; transform-origin: 0 0;
+  }
+  @media (max-width: 600px) {
+    .modal-overlay { padding: 10px; }
+    .modal-content { padding: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -200,7 +219,8 @@
     <label style="font-weight:bold;font-size:14px;margin-top:0;">学会名</label>
     <input type="text" id="gakkai" placeholder="学会名を入力">
     <label style="font-weight:bold;font-size:14px;">報告者名</label>
-    <input type="text" id="reporter" placeholder="報告者名を入力">
+    <select id="reporter" onchange="toggleReporterOther()"></select>
+    <input type="text" id="reporterOther" placeholder="報告者名を入力" style="display:none;margin-top:8px;">
   </div>
 
   <div class="card">
@@ -300,6 +320,43 @@ firebase.initializeApp({
 });
 var db = firebase.firestore();
 
+// 報告者名のプルダウン（視能訓練士・50音順）。いない人は「その他」で手入力
+var REPORTERS = [
+  '板井 陽菜乃', '岩崎 美紀', '岩下 心咲', '大村 琥珀', '花月 陸', '片山 心花',
+  '齊木 琴子', '多森 崇人', '筒井 健太', '野中 七美', '林 美波', '平田 真奈',
+  '松浦 芙紀', '吉田 結翔', '綿田 麻佑菜', '渡辺 怜沙'
+];
+var REPORTER_OTHER = '__other';
+
+(function initReporterSelect() {
+  var sel = document.getElementById('reporter');
+  var html = '<option value="">選択してください</option>';
+  REPORTERS.forEach(function(n) { html += '<option value="' + n + '">' + n + '</option>'; });
+  html += '<option value="' + REPORTER_OTHER + '">その他（名前を入力）</option>';
+  sel.innerHTML = html;
+})();
+
+function toggleReporterOther() {
+  var other = document.getElementById('reporter').value === REPORTER_OTHER;
+  document.getElementById('reporterOther').style.display = other ? 'block' : 'none';
+}
+
+function getReporter() {
+  var v = document.getElementById('reporter').value;
+  return v === REPORTER_OTHER ? document.getElementById('reporterOther').value.trim() : v;
+}
+
+function setReporter(name) {
+  name = name || '';
+  var key = name.replace(/[\s　]/g, '');
+  var hit = REPORTERS.filter(function(n) { return n.replace(/\s/g, '') === key; })[0];
+  var sel = document.getElementById('reporter');
+  if (!name) { sel.value = ''; document.getElementById('reporterOther').value = ''; }
+  else if (hit) { sel.value = hit; }
+  else { sel.value = REPORTER_OTHER; document.getElementById('reporterOther').value = name; }
+  toggleReporterOther();
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -337,7 +394,7 @@ function getFormData() {
   var same = document.getElementById('sameDate').checked;
   return {
     gakkai: document.getElementById('gakkai').value,
-    reporter: document.getElementById('reporter').value,
+    reporter: getReporter(),
     gakkaiFrom: document.getElementById('gakkaiFrom').value,
     gakkaiTo: document.getElementById('gakkaiTo').value,
     sankaFrom: same ? document.getElementById('gakkaiFrom').value : document.getElementById('sankaFrom').value,
@@ -358,10 +415,11 @@ function renderReport(data) {
   return '<div class="report-render">' +
     '<div class="report-title">出張報告書</div>' +
     '<table>' +
-    '<tr><td class="lbl" style="width:11%;">学会名</td><td class="val" colspan="3">' + escHtml(data.gakkai) + '</td></tr>' +
-    '<tr><td class="lbl">学会日程</td><td class="date-val" style="width:50%;white-space:nowrap;">' + gakkaiDates + '</td>' +
-    '<td class="lbl" style="width:10%;">報告者名</td><td class="val" style="width:29%;">' + escHtml(data.reporter) + '</td></tr>' +
-    '<tr><td class="lbl">参加日程</td><td class="date-val" style="white-space:nowrap;">' + sankaDates + '</td>' +
+    '<colgroup><col style="width:13%"><col style="width:46%"><col style="width:13%"><col style="width:28%"></colgroup>' +
+    '<tr><td class="lbl">学会名</td><td class="val" colspan="3">' + escHtml(data.gakkai) + '</td></tr>' +
+    '<tr><td class="lbl">学会日程</td><td class="date-val">' + gakkaiDates + '</td>' +
+    '<td class="lbl">報告者名</td><td class="val">' + escHtml(data.reporter) + '</td></tr>' +
+    '<tr><td class="lbl">参加日程</td><td class="date-val">' + sankaDates + '</td>' +
     '<td class="lbl">業種</td><td class="val">視能訓練士</td></tr>' +
     '</table>' +
     '<div class="report-body"><div class="report-body-inner">' + (data.content || '') + '</div></div>' +
@@ -376,9 +434,8 @@ function escHtml(s) {
 
 function showPreview() {
   var data = getFormData();
-  document.getElementById('preview-report').innerHTML = renderReport(data);
   document.getElementById('previewModal').classList.add('show');
-  autoFitCells(document.getElementById('preview-report'));
+  showSheet(document.getElementById('preview-report'), data);
 }
 
 function closePreview() {
@@ -403,20 +460,26 @@ function openReportPage(data, mode) {
   } else {
     bannerText = '📱 PDF保存：共有ボタン（□↑）→「プリント」→ プレビューをピンチアウト → 共有 →「"ファイル"に保存」';
   }
+  var w = window.open('', '_blank');
+  if (w) { w.document.write(buildReportPageHtml(data, bannerText, false)); w.document.close(); }
+}
 
-  var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
+// 印刷用ページのHTML。sheet=true のときはA4の1枚（余白込み）として描き、プレビューに使う
+function buildReportPageHtml(data, bannerText, sheet) {
+  return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>出張報告書</title><style>' +
     '*{box-sizing:border-box;margin:0;padding:0;}' +
     'html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}' +
-    'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;}' +
+    'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;color:#000;}' +
+    'body.sheet{width:210mm;height:297mm;padding:10mm 10mm 20mm;background:#fff;overflow:hidden;}' +
     '.action-banner{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:12px;margin:10px;font-size:14px;text-align:center;line-height:1.6;}' +
     '.print-page{width:190mm;margin:0 auto;}' +
     '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;}' +
-    '.report-render table{width:100%;border-collapse:collapse;border:2px solid #000;}' +
-    '.report-render table td{border:1px solid #000;padding:4px 5px;vertical-align:middle;white-space:nowrap;}' +
-    '.report-render table td.lbl{font-size:14pt;font-weight:bold;background:#f9f9f9;}' +
-    '.report-render table td.date-val{font-size:10pt;}' +
+    '.report-render table{width:100%;table-layout:fixed;border-collapse:collapse;border:2px solid #000;}' +
+    '.report-render table td{border:1px solid #000;padding:4px 5px;vertical-align:middle;white-space:nowrap;overflow:hidden;}' +
+    '.report-render table td.lbl{font-size:14pt;font-weight:bold;background:#f9f9f9;text-align:center;}' +
+    '.report-render table td.date-val{font-size:11pt;}' +
     '.report-render table td.val{font-size:14pt;}' +
     '.report-render .report-body{font-size:14pt;line-height:1.8;border:2px solid #000;border-top:none;padding:10px 12px;overflow:hidden;height:225mm;overflow-wrap:anywhere;}' +
     '.report-body-inner{display:flow-root;}' +
@@ -424,14 +487,29 @@ function openReportPage(data, mode) {
     '.report-body-inner *{font-size:inherit!important;line-height:inherit!important;}' +
     '@media print{.action-banner{display:none!important;}' +
     '@page{size:A4 portrait;margin:10mm 10mm 20mm 10mm;}}' +
-    '</style></head><body>' +
-    '<div class="action-banner">' + bannerText + '</div>' +
+    '</style></head><body' + (sheet ? ' class="sheet"' : '') + '>' +
+    (bannerText ? '<div class="action-banner">' + bannerText + '</div>' : '') +
     '<div class="print-page">' + renderReport(data) + '</div>' +
     '<script>(' + printFitFont.toString() + ')();<\/script>' +
     '</body></html>';
-  var w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
 }
+
+// 画面の container に、印刷されるA4の1枚を幅いっぱいに縮小して表示する
+var SHEET_W = 210 * 96 / 25.4, SHEET_H = 297 * 96 / 25.4;
+function showSheet(container, data) {
+  container.innerHTML = '<div class="sheet-wrap"><iframe class="sheet-frame" title="報告書"></iframe></div>';
+  container.querySelector('.sheet-frame').srcdoc = buildReportPageHtml(data, '', true);
+  scaleSheets();
+}
+function scaleSheets() {
+  document.querySelectorAll('.sheet-wrap').forEach(function(wrap) {
+    var s = wrap.clientWidth / SHEET_W;
+    if (!s) return;
+    wrap.querySelector('.sheet-frame').style.transform = 'scale(' + s + ')';
+    wrap.style.height = (SHEET_H * s) + 'px';
+  });
+}
+window.addEventListener('resize', scaleSheets);
 
 // 印刷用ページの中で実行される。報告内容の枠（高さ225mm固定）そのものを使い、
 // はみ出さない最大の文字サイズを二分探索で探す
@@ -439,7 +517,20 @@ function printFitFont() {
   var body = document.querySelector('.report-body');
   var inner = body && body.querySelector('.report-body-inner');
   if (!inner) return;
+  function fitCells() {
+    var cells = document.querySelectorAll('td.val, td.date-val');
+    for (var k = 0; k < cells.length; k++) {
+      var td = cells[k];
+      td.style.fontSize = '';
+      var size = parseFloat(getComputedStyle(td).fontSize);
+      while (td.scrollWidth > td.clientWidth && size > 9) {
+        size -= 0.5;
+        td.style.fontSize = size + 'px';
+      }
+    }
+  }
   function fit() {
+    fitCells();
     var cs = getComputedStyle(body);
     var avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
     var lo = 8, hi = 40;
@@ -470,20 +561,6 @@ function printFitFont() {
     var mq = window.matchMedia('print');
     if (mq.addListener) mq.addListener(function(e) { if (e.matches) fit(); });
   }
-}
-
-function autoFitCells(container) {
-  if (!container) return;
-  var cells = container.querySelectorAll('td');
-  cells.forEach(function(td) {
-    if (td.classList.contains('lbl')) return;
-    var orig = parseFloat(window.getComputedStyle(td).fontSize);
-    var size = orig;
-    while (td.scrollWidth > td.clientWidth && size > 4) {
-      size -= 0.5;
-      td.style.fontSize = size + 'px';
-    }
-  });
 }
 
 async function saveReport() {
@@ -565,8 +642,7 @@ async function viewReport(id) {
   if (_reportsCache[id]) {
     var data = _reportsCache[id];
     window._currentViewData = data;
-    document.getElementById('view-report').innerHTML = renderReport(data);
-    autoFitCells(document.getElementById('view-report'));
+    showSheet(document.getElementById('view-report'), data);
     document.getElementById('viewActions').style.display = 'flex';
     return;
   }
@@ -580,8 +656,7 @@ async function viewReport(id) {
     var data = doc.data();
     _reportsCache[id] = data;
     window._currentViewData = data;
-    document.getElementById('view-report').innerHTML = renderReport(data);
-    autoFitCells(document.getElementById('view-report'));
+    showSheet(document.getElementById('view-report'), data);
     document.getElementById('viewActions').style.display = 'flex';
   } catch (e) {
     document.getElementById('view-report').innerHTML = '<div class="loading">読み込みに失敗しました</div>';
@@ -593,7 +668,7 @@ function editReport() {
   if (!data) return;
   showScreen('screen-form');
   document.getElementById('gakkai').value = data.gakkai || '';
-  document.getElementById('reporter').value = data.reporter || '';
+  setReporter(data.reporter);
   document.getElementById('gakkaiFrom').value = data.gakkaiFrom || '';
   document.getElementById('gakkaiTo').value = data.gakkaiTo || '';
   document.getElementById('sankaFrom').value = data.sankaFrom || '';
