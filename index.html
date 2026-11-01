@@ -326,19 +326,6 @@
   </div>
 </div>
 
-<!-- Delete Modal（削除のパスワード） -->
-<div class="modal-overlay" id="deleteModal">
-  <div class="modal-content" style="max-width:420px;">
-    <h2 style="text-align:center;margin-bottom:6px;">報告書を削除</h2>
-    <p id="deleteTarget" style="text-align:center;font-size:14px;color:#333;margin-bottom:12px;"></p>
-    <label for="deletePass" style="margin-top:0;">パスワード（報告者の苗字をローマ字で。例：筒井 → tsutsui）</label>
-    <input type="text" id="deletePass" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="latin">
-    <p id="deleteError" style="color:#e53935;font-size:13px;margin-top:6px;min-height:18px;"></p>
-    <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
-    <button class="btn btn-outline" onclick="closeDelete()" style="margin-top:8px;">やめる</button>
-  </div>
-</div>
-
 <!-- Share Modal -->
 <div class="modal-overlay" id="shareModal">
   <div class="modal-content" style="max-width:500px;">
@@ -368,24 +355,6 @@ var REPORTERS = [
   '松浦 芙紀', '吉田 結翔', '綿田 麻佑菜', '渡辺 怜沙'
 ];
 var REPORTER_OTHER = '__other';
-
-// 削除のパスワード＝報告者の苗字のローマ字（ヘボン式）。名簿にない人の報告書は削除できない
-var SURNAME_ROMAJI = {
-  '板井': ['itai'], '岩崎': ['iwasaki'], '岩下': ['iwashita'], '大村': ['omura', 'ohmura', 'oomura'],
-  '花月': ['kagetsu'], '片山': ['katayama'], '齊木': ['saiki'], '多森': ['tamori'],
-  '筒井': ['tsutsui'], '野中': ['nonaka'], '林': ['hayashi'], '平田': ['hirata'],
-  '松浦': ['matsuura'], '吉田': ['yoshida'], '綿田': ['watada'], '渡辺': ['watanabe'],
-  '原': ['hara']
-};
-
-function romajiFor(reporter) {
-  var name = (reporter || '').replace(/[\s　]/g, '');
-  var hit = '';
-  Object.keys(SURNAME_ROMAJI).forEach(function(k) {
-    if (name.indexOf(k) === 0 && k.length > hit.length) hit = k;
-  });
-  return hit ? SURNAME_ROMAJI[hit] : null;
-}
 
 (function initReporterSelect() {
   var sel = document.getElementById('reporter');
@@ -786,40 +755,14 @@ function editFromList(id) {
   editReport();
 }
 
-function openDelete(id) {
+async function openDelete(id) {
   closeItemMenus();
   var d = _reportsCache[id];
   if (!d) return;
-  if (!romajiFor(d.reporter)) {
-    alert('「' + d.reporter + '」さんのパスワード（苗字のローマ字）が登録されていないため、ここからは削除できません。筒井まで連絡してください。');
-    return;
-  }
-  window._deleteId = id;
-  document.getElementById('deleteTarget').textContent = d.gakkai + '（' + d.reporter + '）';
-  document.getElementById('deletePass').value = '';
-  document.getElementById('deleteError').textContent = '';
-  document.getElementById('deleteModal').classList.add('show');
-  document.getElementById('deletePass').focus();
-}
-
-function closeDelete() {
-  document.getElementById('deleteModal').classList.remove('show');
-  window._deleteId = null;
-}
-
-async function confirmDelete() {
-  var id = window._deleteId;
-  var d = id && _reportsCache[id];
-  if (!d) return;
-  var input = document.getElementById('deletePass').value.normalize('NFKC').trim().toLowerCase();
-  if (romajiFor(d.reporter).indexOf(input) < 0) {
-    document.getElementById('deleteError').textContent = 'パスワードが違います';
-    return;
-  }
+  if (!confirm('「' + d.gakkai + '（' + d.reporter + '）」を削除しますか？')) return;
   try {
     await db.collection('reports').doc(id).delete();
     delete _reportsCache[id];
-    closeDelete();
     alert('削除しました');
     loadPastReports();
   } catch (e) {
