@@ -6,6 +6,8 @@
 <title>出張報告書作成</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -178,6 +180,13 @@
 
   .loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
 
+  .pdf-area .btn-primary { font-size: 17px; padding: 16px 20px; margin-top: 0; }
+  .pdf-area .btn-primary:disabled { background: #90a4ae; }
+  .pdf-help {
+    font-size: 13px; color: #333; line-height: 1.7; background: #f5f7fa;
+    border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+  }
+
   /* A4の1枚を画面幅に縮小して見せる（中身は印刷用ページと同じ） */
   .sheet-wrap {
     position: relative; width: 100%; overflow: hidden; background: #fff;
@@ -217,7 +226,7 @@
 
   <div class="card">
     <label style="font-weight:bold;font-size:14px;margin-top:0;">学会名</label>
-    <input type="text" id="gakkai" placeholder="学会名を入力">
+    <input type="text" id="gakkai" placeholder="学会名を入力" maxlength="60">
     <label style="font-weight:bold;font-size:14px;">報告者名</label>
     <select id="reporter" onchange="toggleReporterOther()"></select>
     <input type="text" id="reporterOther" placeholder="報告者名を入力" style="display:none;margin-top:8px;">
@@ -296,13 +305,23 @@
   </div>
 </div>
 
+<!-- Print Modal（保存済みの報告書を印刷） -->
+<div class="modal-overlay" id="printModal">
+  <div class="modal-content" style="max-width:500px;">
+    <h2 style="text-align:center;margin-bottom:4px;">印刷</h2>
+    <p style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;">A4縦1枚のPDFにして印刷します</p>
+    <div class="pdf-area" id="pdfAreaPrint"></div>
+    <button class="btn btn-outline" onclick="document.getElementById('printModal').classList.remove('show')" style="margin-top:10px;">閉じる</button>
+  </div>
+</div>
+
 <!-- Share Modal -->
 <div class="modal-overlay" id="shareModal">
   <div class="modal-content" style="max-width:500px;">
     <div style="text-align:center;font-size:40px;line-height:1;color:#43a047;">✓</div>
     <h2 style="text-align:center;margin:8px 0 4px;">保存しました</h2>
-    <p style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;">次に、印刷設定を開いて印刷します</p>
-    <button class="btn btn-primary" onclick="printSaved()" style="font-size:17px;padding:16px 20px;">次へ：印刷設定を開く</button>
+    <p style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;">次に、A4縦1枚のPDFにして印刷します</p>
+    <div class="pdf-area" id="pdfAreaShare"></div>
     <div class="share-box">
       <p>みんなに共有するときは、このURLを送ってください</p>
       <input type="text" class="share-url" id="shareUrl" readonly onclick="copyShareUrl()">
@@ -445,47 +464,83 @@ function closePreview() {
   document.getElementById('previewModal').classList.remove('show');
 }
 
-function openPdfTab() {
-  var data = getFormData();
-  openReportPage(data, 'pdf');
-}
-
 function printFromView() {
-  if (window._currentViewData) {
-    openReportPage(window._currentViewData, 'print');
+  if (!window._currentViewData) return;
+  document.getElementById('printModal').classList.add('show');
+  startPdf(window._currentViewData, document.getElementById('pdfAreaPrint'));
+}
+
+// 端末の種類（PDFの開き方と案内を変える）
+var DEVICE = (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) ? 'ios'
+  : /Android/.test(navigator.userAgent) ? 'android' : 'pc';
+
+var PDF_HELP = {
+  ios: '共有の画面が出たら「<b>プリント</b>」を選んでください。<br>「"ファイル"に保存」を選ぶとPDFとして残せます。',
+  android: 'PDFがダウンロードされます。開いたら右上の「<b>︙</b>」→「<b>印刷</b>」を選んでください。',
+  pc: 'PDFが新しいタブで開きます。印刷ボタン（または <b>Ctrl＋P</b>／<b>⌘＋P</b>）で印刷してください。'
+};
+
+// どの端末でも同じ仕上がりになるよう、画面を直接印刷せず、A4縦1枚のPDFを作ってから印刷する
+function startPdf(data, area) {
+  window._pdf = null;
+  area.innerHTML = '<button class="btn btn-primary" disabled>印刷用のPDFを作っています…</button>';
+  makeReportPdf(data).then(function(blob) {
+    var name = ('出張報告書_' + (data.reporter || '') + '_' + (data.gakkai || '')).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60) + '.pdf';
+    window._pdf = { blob: blob, name: name };
+    area.innerHTML = '<button class="btn btn-primary" onclick="openPdf()">🖨 印刷する（PDFを開く）</button>' +
+      '<div class="pdf-help">' + PDF_HELP[DEVICE] +
+      '<br>PDFは最初からA4縦1枚です。倍率などは変えずにそのまま印刷できます。</div>';
+  }).catch(function(e) {
+    area.innerHTML = '<button class="btn btn-primary" onclick="startPdf(window._pdfData, this.parentNode)">もう一度PDFを作る</button>' +
+      '<div class="pdf-help">PDFを作れませんでした（' + escHtml(e && e.message) + '）。通信のよい場所でもう一度お試しください。</div>';
+  });
+  window._pdfData = data;
+}
+
+function makeReportPdf(data) {
+  return new Promise(function(resolve, reject) {
+    if (!window.html2canvas || !window.jspdf) { reject(new Error('部品の読み込み失敗')); return; }
+    // A4の1枚を画面の外で描き、文字サイズの自動調整が終わってから画像にする
+    var frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;';
+    frame.onload = function() {
+      var doc = frame.contentDocument;
+      if (!doc.querySelector('.report-body')) return; // 中身を入れる前の空ページの読み込みは無視
+      var fontsReady = (doc.fonts && doc.fonts.ready) ? doc.fonts.ready : Promise.resolve();
+      fontsReady.then(function() {
+        return new Promise(function(r) { setTimeout(r, 300); });
+      }).then(function() {
+        var w = doc.body.offsetWidth, h = doc.body.offsetHeight;
+        return html2canvas(doc.body, { scale: 3, backgroundColor: '#ffffff', width: w, height: h, windowWidth: w, windowHeight: h });
+      }).then(function(canvas) {
+        var pdf = new jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        resolve(pdf.output('blob'));
+      }).catch(reject).then(function() { frame.remove(); });
+    };
+    frame.srcdoc = buildReportPageHtml(data, true);
+    document.body.appendChild(frame);
+  });
+}
+
+function openPdf() {
+  var pdf = window._pdf;
+  if (!pdf) return;
+  var file = (typeof File === 'function') ? new File([pdf.blob], pdf.name, { type: 'application/pdf' }) : null;
+  if (DEVICE === 'ios' && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file] }).catch(function() {});
+    return;
   }
+  var url = URL.createObjectURL(pdf.blob);
+  if (DEVICE !== 'android' && window.open(url, '_blank')) return;
+  var a = document.createElement('a');
+  a.href = url; a.download = pdf.name;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
-function printSaved() {
-  if (window._lastSavedData) openReportPage(window._lastSavedData, 'print');
-}
-
-function openReportPage(data, mode) {
-  var bannerText = '';
-  if (mode === 'print') {
-    bannerText = '<button class="print-btn" onclick="window.print()">🖨 印刷設定を開く</button>' +
-      '<div>印刷設定が自動で開かないときは、上のボタンを押してください。<br>' +
-      '用紙は「A4」、倍率は「100%（既定）」のままで印刷できます。</div>';
-  } else {
-    bannerText = '📱 PDF保存：共有ボタン（□↑）→「プリント」→ プレビューをピンチアウト → 共有 →「"ファイル"に保存」';
-  }
-  var w = window.open('', '_blank');
-  if (w) {
-    w.document.write(buildReportPageHtml(data, bannerText, false, mode === 'print'));
-    w.document.close();
-  } else {
-    alert('印刷用のページを開けませんでした。ポップアップのブロックを解除してから、もう一度押してください。');
-  }
-}
-
-// 印刷用ページの中で実行される。文字サイズの調整が終わってから印刷設定を開く
-function printAutoOpen() {
-  var go = function() { setTimeout(function() { window.print(); }, 500); };
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
-}
-
-// 印刷用ページのHTML。sheet=true のときはA4の1枚（余白込み）として描き、プレビューに使う
-function buildReportPageHtml(data, bannerText, sheet, autoPrint) {
+// 報告書のA4ページのHTML。sheet=true のときはA4の1枚（余白込み）として描く（プレビュー・PDF用）
+function buildReportPageHtml(data, sheet) {
   return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>出張報告書</title><style>' +
@@ -493,8 +548,6 @@ function buildReportPageHtml(data, bannerText, sheet, autoPrint) {
     'html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}' +
     'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;color:#000;}' +
     'body.sheet{width:210mm;height:297mm;padding:10mm 10mm 20mm;background:#fff;overflow:hidden;}' +
-    '.action-banner{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:12px;margin:10px;font-size:14px;text-align:center;line-height:1.6;}' +
-    '.print-btn{display:block;width:100%;max-width:360px;margin:0 auto 8px;padding:14px;border:none;border-radius:8px;background:#1976d2;color:#fff;font-size:17px;font-weight:bold;cursor:pointer;}' +
     '.print-page{width:190mm;margin:0 auto;}' +
     '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;}' +
     '.report-render table{width:100%;table-layout:fixed;border-collapse:collapse;border:2px solid #000;}' +
@@ -506,13 +559,10 @@ function buildReportPageHtml(data, bannerText, sheet, autoPrint) {
     '.report-body-inner{display:flow-root;}' +
     // 貼り付け等で保存された文字サイズ指定を無視し、枠の文字サイズに揃える
     '.report-body-inner *{font-size:inherit!important;line-height:inherit!important;}' +
-    '@media print{.action-banner{display:none!important;}' +
-    '@page{size:A4 portrait;margin:10mm 10mm 20mm 10mm;}}' +
+    '@media print{@page{size:A4 portrait;margin:10mm 10mm 20mm 10mm;}}' +
     '</style></head><body' + (sheet ? ' class="sheet"' : '') + '>' +
-    (bannerText ? '<div class="action-banner">' + bannerText + '</div>' : '') +
     '<div class="print-page">' + renderReport(data) + '</div>' +
-    '<script>(' + printFitFont.toString() + ')();' +
-    (autoPrint ? '(' + printAutoOpen.toString() + ')();' : '') + '<\/script>' +
+    '<script>(' + printFitFont.toString() + ')();<\/script>' +
     '</body></html>';
 }
 
@@ -520,7 +570,7 @@ function buildReportPageHtml(data, bannerText, sheet, autoPrint) {
 var SHEET_W = 210 * 96 / 25.4, SHEET_H = 297 * 96 / 25.4;
 function showSheet(container, data) {
   container.innerHTML = '<div class="sheet-wrap"><iframe class="sheet-frame" title="報告書"></iframe></div>';
-  container.querySelector('.sheet-frame').srcdoc = buildReportPageHtml(data, '', true);
+  container.querySelector('.sheet-frame').srcdoc = buildReportPageHtml(data, true);
   scaleSheets();
 }
 function scaleSheets() {
@@ -591,6 +641,11 @@ async function saveReport() {
     alert('学会名と報告者名は必須です');
     return;
   }
+  var len = document.getElementById('content-editor').innerText.length;
+  if (len > 650) {
+    alert('報告内容が ' + len + ' 文字あります。A4の1枚に読みやすく収めるため、650文字以内にしてください。');
+    return;
+  }
   var btn = document.getElementById('saveBtn');
   btn.disabled = true;
   btn.textContent = '保存しています…';
@@ -606,12 +661,12 @@ async function saveReport() {
       var ref = await db.collection('reports').add(data);
       id = ref.id;
     }
-    window._lastSavedData = data;
     delete _reportsCache[id];
     closePreview();
     var url = 'https://kenta221ww-afk.github.io/shucchou-report/?view=' + id;
     document.getElementById('shareUrl').value = url;
     document.getElementById('shareModal').classList.add('show');
+    startPdf(data, document.getElementById('pdfAreaShare'));
   } catch (e) {
     alert('保存に失敗しました: ' + e.message);
   } finally {
