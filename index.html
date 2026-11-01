@@ -584,7 +584,7 @@ function scaleSheets() {
 window.addEventListener('resize', scaleSheets);
 
 // 印刷用ページの中で実行される。報告内容の枠（高さ225mm固定）そのものを使い、
-// はみ出さない最大の文字サイズを二分探索で探す
+// はみ出さない最大の文字サイズを二分探索で探す（名前の欄と同じ14ptを上限にする）
 function printFitFont() {
   var body = document.querySelector('.report-body');
   var inner = body && body.querySelector('.report-body-inner');
@@ -605,7 +605,7 @@ function printFitFont() {
     fitCells();
     var cs = getComputedStyle(body);
     var avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    var lo = 8, hi = 40;
+    var lo = 8, hi = 14;
     body.style.lineHeight = '';
     body.style.fontSize = hi + 'pt';
     if (inner.offsetHeight <= avail) return;
