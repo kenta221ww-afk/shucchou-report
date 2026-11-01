@@ -290,8 +290,8 @@
   <div class="modal-content">
     <div id="preview-report"></div>
     <div class="no-print" style="margin-top:16px;">
-      <button class="btn btn-secondary" onclick="saveReport()">保存・URL発行</button>
-      <button class="btn btn-outline" onclick="closePreview()" style="margin-top:8px;">修正</button>
+      <button class="btn btn-secondary" id="saveBtn" onclick="saveReport()">この内容で保存して、印刷へ進む</button>
+      <button class="btn btn-outline" onclick="closePreview()" style="margin-top:8px;">入力に戻って直す</button>
     </div>
   </div>
 </div>
@@ -299,13 +299,16 @@
 <!-- Share Modal -->
 <div class="modal-overlay" id="shareModal">
   <div class="modal-content" style="max-width:500px;">
-    <h2 style="text-align:center;margin-bottom:12px;">保存しました</h2>
-    <p style="text-align:center;font-size:13px;color:#666;margin-bottom:12px;">このURLを共有すると、相手が報告書を閲覧できます</p>
+    <div style="text-align:center;font-size:40px;line-height:1;color:#43a047;">✓</div>
+    <h2 style="text-align:center;margin:8px 0 4px;">保存しました</h2>
+    <p style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;">次に、印刷設定を開いて印刷します</p>
+    <button class="btn btn-primary" onclick="printSaved()" style="font-size:17px;padding:16px 20px;">次へ：印刷設定を開く</button>
     <div class="share-box">
+      <p>みんなに共有するときは、このURLを送ってください</p>
       <input type="text" class="share-url" id="shareUrl" readonly onclick="copyShareUrl()">
+      <button class="btn btn-outline" onclick="copyShareUrl()" style="margin-top:8px;padding:10px;font-size:14px;">URLをコピーする</button>
     </div>
-    <button class="btn btn-secondary" onclick="copyShareUrl()" style="margin-top:10px;">URLをコピーする</button>
-    <button class="btn btn-outline" onclick="closeShare()" style="margin-top:6px;">トップに戻る</button>
+    <button class="btn btn-outline" onclick="closeShare()" style="margin-top:10px;">トップに戻る</button>
   </div>
 </div>
 
@@ -453,19 +456,36 @@ function printFromView() {
   }
 }
 
+function printSaved() {
+  if (window._lastSavedData) openReportPage(window._lastSavedData, 'print');
+}
+
 function openReportPage(data, mode) {
   var bannerText = '';
   if (mode === 'print') {
-    bannerText = '🖨 印刷方法：ブラウザの共有ボタン（□↑）→「プリント」を選択してください';
+    bannerText = '<button class="print-btn" onclick="window.print()">🖨 印刷設定を開く</button>' +
+      '<div>印刷設定が自動で開かないときは、上のボタンを押してください。<br>' +
+      '用紙は「A4」、倍率は「100%（既定）」のままで印刷できます。</div>';
   } else {
     bannerText = '📱 PDF保存：共有ボタン（□↑）→「プリント」→ プレビューをピンチアウト → 共有 →「"ファイル"に保存」';
   }
   var w = window.open('', '_blank');
-  if (w) { w.document.write(buildReportPageHtml(data, bannerText, false)); w.document.close(); }
+  if (w) {
+    w.document.write(buildReportPageHtml(data, bannerText, false, mode === 'print'));
+    w.document.close();
+  } else {
+    alert('印刷用のページを開けませんでした。ポップアップのブロックを解除してから、もう一度押してください。');
+  }
+}
+
+// 印刷用ページの中で実行される。文字サイズの調整が終わってから印刷設定を開く
+function printAutoOpen() {
+  var go = function() { setTimeout(function() { window.print(); }, 500); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
 }
 
 // 印刷用ページのHTML。sheet=true のときはA4の1枚（余白込み）として描き、プレビューに使う
-function buildReportPageHtml(data, bannerText, sheet) {
+function buildReportPageHtml(data, bannerText, sheet, autoPrint) {
   return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>出張報告書</title><style>' +
@@ -474,6 +494,7 @@ function buildReportPageHtml(data, bannerText, sheet) {
     'body{font-family:"Meiryo","Hiragino Kaku Gothic ProN",sans-serif;color:#000;}' +
     'body.sheet{width:210mm;height:297mm;padding:10mm 10mm 20mm;background:#fff;overflow:hidden;}' +
     '.action-banner{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:12px;margin:10px;font-size:14px;text-align:center;line-height:1.6;}' +
+    '.print-btn{display:block;width:100%;max-width:360px;margin:0 auto 8px;padding:14px;border:none;border-radius:8px;background:#1976d2;color:#fff;font-size:17px;font-weight:bold;cursor:pointer;}' +
     '.print-page{width:190mm;margin:0 auto;}' +
     '.report-render .report-title{text-align:center;font-size:20pt;font-weight:bold;margin-bottom:8px;}' +
     '.report-render table{width:100%;table-layout:fixed;border-collapse:collapse;border:2px solid #000;}' +
@@ -490,7 +511,8 @@ function buildReportPageHtml(data, bannerText, sheet) {
     '</style></head><body' + (sheet ? ' class="sheet"' : '') + '>' +
     (bannerText ? '<div class="action-banner">' + bannerText + '</div>' : '') +
     '<div class="print-page">' + renderReport(data) + '</div>' +
-    '<script>(' + printFitFont.toString() + ')();<\/script>' +
+    '<script>(' + printFitFont.toString() + ')();' +
+    (autoPrint ? '(' + printAutoOpen.toString() + ')();' : '') + '<\/script>' +
     '</body></html>';
 }
 
@@ -569,6 +591,9 @@ async function saveReport() {
     alert('学会名と報告者名は必須です');
     return;
   }
+  var btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = '保存しています…';
   try {
     var id;
     if (window._editingId) {
@@ -581,12 +606,17 @@ async function saveReport() {
       var ref = await db.collection('reports').add(data);
       id = ref.id;
     }
+    window._lastSavedData = data;
+    delete _reportsCache[id];
     closePreview();
     var url = 'https://kenta221ww-afk.github.io/shucchou-report/?view=' + id;
     document.getElementById('shareUrl').value = url;
     document.getElementById('shareModal').classList.add('show');
   } catch (e) {
     alert('保存に失敗しました: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'この内容で保存して、印刷へ進む';
   }
 }
 
