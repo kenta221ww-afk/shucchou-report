@@ -94,6 +94,7 @@
   .menu-btn-new:active { background: linear-gradient(135deg, #2a2a2a, #4a4a4a); }
   .menu-btn-past { background: linear-gradient(135deg, #4a7fa5, #6ba3c7); }
   .menu-btn-past:active { background: linear-gradient(135deg, #3a6f95, #5b93b7); }
+  .menu-sub { display: block; font-size: 15px; font-weight: normal; letter-spacing: 1px; margin-top: 6px; opacity: 0.9; }
 
   .screen { display: none; }
   .screen.active { display: block; }
@@ -125,16 +126,6 @@
   }
   .modal-buttons { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
   .modal-buttons .btn { flex: 1; min-width: 80px; margin-top: 0; }
-
-  /* Share URL box */
-  .share-box {
-    background: #e8f5e9; border-radius: 8px; padding: 12px; margin-top: 12px;
-  }
-  .share-box p { font-size: 13px; color: #333; margin-bottom: 8px; }
-  .share-url {
-    width: 100%; padding: 8px; border: 1px solid #a5d6a7; border-radius: 6px;
-    font-size: 12px; background: #fff; word-break: break-all;
-  }
 
   /* Report rendering */
   .report-render { font-family: 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif; }
@@ -215,7 +206,7 @@
   </div>
   <div class="top-menu">
     <button class="menu-btn menu-btn-new" onclick="showScreen('screen-form')">新規作成</button>
-    <button class="menu-btn menu-btn-past" onclick="loadPastReports()">過去の報告</button>
+    <button class="menu-btn menu-btn-past" onclick="loadPastReports()">過去の報告<span class="menu-sub">（保存したデータ）</span></button>
   </div>
 </div>
 
@@ -299,8 +290,9 @@
   <div class="modal-content">
     <div id="preview-report"></div>
     <div class="no-print" style="margin-top:16px;">
-      <button class="btn btn-secondary" id="saveBtn" onclick="saveReport()">この内容で保存して、印刷へ進む</button>
-      <button class="btn btn-outline" onclick="closePreview()" style="margin-top:8px;">入力に戻って直す</button>
+      <button class="btn btn-secondary save-btn" onclick="saveReport(false)">保存のみしておく</button>
+      <button class="btn btn-primary save-btn" onclick="saveReport(true)">保存してそのまま印刷へ</button>
+      <button class="btn btn-outline" onclick="closePreview()" style="margin-top:8px;">内容を修正する</button>
     </div>
   </div>
 </div>
@@ -320,13 +312,8 @@
   <div class="modal-content" style="max-width:500px;">
     <div style="text-align:center;font-size:40px;line-height:1;color:#43a047;">✓</div>
     <h2 style="text-align:center;margin:8px 0 4px;">保存しました</h2>
-    <p style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;">次に、A4縦1枚のPDFにして印刷します</p>
+    <p id="savedNote" style="text-align:center;font-size:14px;color:#555;margin-bottom:14px;"></p>
     <div class="pdf-area" id="pdfAreaShare"></div>
-    <div class="share-box">
-      <p>みんなに共有するときは、このURLを送ってください</p>
-      <input type="text" class="share-url" id="shareUrl" readonly onclick="copyShareUrl()">
-      <button class="btn btn-outline" onclick="copyShareUrl()" style="margin-top:8px;padding:10px;font-size:14px;">URLをコピーする</button>
-    </div>
     <button class="btn btn-outline" onclick="closeShare()" style="margin-top:10px;">トップに戻る</button>
   </div>
 </div>
@@ -635,7 +622,8 @@ function printFitFont() {
   }
 }
 
-async function saveReport() {
+// andPrint=true：保存してそのまま印刷へ／false：保存のみ
+async function saveReport(andPrint) {
   var data = getFormData();
   if (!data.gakkai || !data.reporter) {
     alert('学会名と報告者名は必須です');
@@ -646,9 +634,10 @@ async function saveReport() {
     alert('報告内容が ' + len + ' 文字あります。A4の1枚に読みやすく収めるため、650文字以内にしてください。');
     return;
   }
-  var btn = document.getElementById('saveBtn');
-  btn.disabled = true;
-  btn.textContent = '保存しています…';
+  var btns = document.querySelectorAll('.save-btn');
+  var labels = [];
+  btns.forEach(function(b, i) { labels[i] = b.textContent; b.disabled = true; });
+  (andPrint ? btns[1] : btns[0]).textContent = '保存しています…';
   try {
     var id;
     if (window._editingId) {
@@ -663,34 +652,38 @@ async function saveReport() {
     }
     delete _reportsCache[id];
     closePreview();
-    var url = 'https://kenta221ww-afk.github.io/shucchou-report/?view=' + id;
-    document.getElementById('shareUrl').value = url;
+    var area = document.getElementById('pdfAreaShare');
+    if (andPrint) {
+      document.getElementById('savedNote').textContent = '次に、A4縦1枚のPDFにして印刷します';
+      startPdf(data, area);
+    } else {
+      document.getElementById('savedNote').textContent = 'あとから「過去の報告（保存したデータ）」で開いて、印刷・修正できます';
+      area.innerHTML = '';
+    }
     document.getElementById('shareModal').classList.add('show');
-    startPdf(data, document.getElementById('pdfAreaShare'));
   } catch (e) {
     alert('保存に失敗しました: ' + e.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'この内容で保存して、印刷へ進む';
-  }
-}
-
-function copyShareUrl() {
-  var input = document.getElementById('shareUrl');
-  input.select();
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(input.value).then(function() {
-      alert('URLをコピーしました');
-    });
-  } else {
-    document.execCommand('copy');
-    alert('URLをコピーしました');
+    btns.forEach(function(b, i) { b.disabled = false; b.textContent = labels[i]; });
   }
 }
 
 function closeShare() {
   document.getElementById('shareModal').classList.remove('show');
+  resetForm();
   showScreen('screen-top');
+}
+
+// 保存が済んだら入力欄を空にして、次の新規作成に備える
+function resetForm() {
+  ['gakkai', 'gakkaiFrom', 'gakkaiTo', 'sankaFrom', 'sankaTo'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  setReporter('');
+  document.getElementById('sameDate').checked = false;
+  document.getElementById('sankaDateRow').style.display = 'block';
+  document.getElementById('content-editor').innerHTML = '';
+  updateCharCount();
 }
 
 var _reportsCache = {};
