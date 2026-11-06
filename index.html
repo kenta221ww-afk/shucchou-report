@@ -274,7 +274,7 @@
       <button onmousedown="event.preventDefault()" onclick="execColor()">色を適用</button>
     </div>
     <div id="content-editor" contenteditable="true" oninput="updateCharCount()"></div>
-    <div class="char-counter" id="charCounter">0 / 650</div>
+    <div class="char-counter" id="charCounter">0 / 1000</div>
   </div>
 
   <div class="card">
@@ -356,6 +356,9 @@ var REPORTERS = [
 ];
 var REPORTER_OTHER = '__other';
 
+// 報告内容の文字数の上限（文字の大きさは量に合わせて自動で小さくなり、A4の1枚に収まる）
+var MAX_CHARS = 1000;
+
 (function initReporterSelect() {
   var sel = document.getElementById('reporter');
   var html = '<option value="">選択してください</option>';
@@ -414,8 +417,8 @@ function updateCharCount() {
   var el = document.getElementById('content-editor');
   var len = el.innerText.length;
   var counter = document.getElementById('charCounter');
-  counter.textContent = len + ' / 650';
-  counter.className = 'char-counter' + (len > 650 ? ' over' : '');
+  counter.textContent = len + ' / ' + MAX_CHARS;
+  counter.className = 'char-counter' + (len > MAX_CHARS ? ' over' : '');
 }
 
 function getFormData() {
@@ -504,10 +507,9 @@ function startPdf(data, area) {
   window._pdfData = data;
 }
 
-function makeReportPdf(data) {
+// A4の1枚を画面の外で描き、文字サイズの自動調整が終わってから work(doc) を行う
+function withSheetFrame(data, work) {
   return new Promise(function(resolve, reject) {
-    if (!window.html2canvas || !window.jspdf) { reject(new Error('部品の読み込み失敗')); return; }
-    // A4の1枚を画面の外で描き、文字サイズの自動調整が終わってから画像にする
     var frame = document.createElement('iframe');
     frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;';
     frame.onload = function() {
@@ -517,16 +519,31 @@ function makeReportPdf(data) {
       fontsReady.then(function() {
         return new Promise(function(r) { setTimeout(r, 300); });
       }).then(function() {
-        var w = doc.body.offsetWidth, h = doc.body.offsetHeight;
-        return html2canvas(doc.body, { scale: 3, backgroundColor: '#ffffff', width: w, height: h, windowWidth: w, windowHeight: h });
-      }).then(function(canvas) {
-        var pdf = new jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
-        resolve(pdf.output('blob'));
-      }).catch(reject).then(function() { frame.remove(); });
+        return work(doc);
+      }).then(resolve, reject).then(function() { frame.remove(); });
     };
     frame.srcdoc = buildReportPageHtml(data, true);
     document.body.appendChild(frame);
+  });
+}
+
+// 報告内容がA4の1枚（一番小さい文字・詰めた行間）に収まるか
+function checkReportFits(data) {
+  return withSheetFrame(data, function(doc) {
+    return doc.querySelector('.report-body').getAttribute('data-fits') !== 'false';
+  });
+}
+
+function makeReportPdf(data) {
+  if (!window.html2canvas || !window.jspdf) return Promise.reject(new Error('部品の読み込み失敗'));
+  return withSheetFrame(data, function(doc) {
+    var w = doc.body.offsetWidth, h = doc.body.offsetHeight;
+    return html2canvas(doc.body, { scale: 3, backgroundColor: '#ffffff', width: w, height: h, windowWidth: w, windowHeight: h })
+      .then(function(canvas) {
+        var pdf = new jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        return pdf.output('blob');
+      });
   });
 }
 
@@ -590,7 +607,9 @@ function scaleSheets() {
 window.addEventListener('resize', scaleSheets);
 
 // 印刷用ページの中で実行される。報告内容の枠（高さ225mm固定）そのものを使い、
-// はみ出さない最大の文字サイズを二分探索で探す（名前の欄と同じ14ptを上限にする）
+// はみ出さない最大の文字サイズを二分探索で探す（名前の欄と同じ14ptを上限、8ptを下限にする）。
+// 改行が多いと行数が足りなくなるので、そのときは行間を詰めて文字を大きく保つ。
+// 8pt・行間1.4でも収まらないときは、枠に data-fits="false" を付ける（保存前の確認に使う）
 function printFitFont() {
   var body = document.querySelector('.report-body');
   var inner = body && body.querySelector('.report-body-inner');
@@ -611,23 +630,45 @@ function printFitFont() {
     fitCells();
     var cs = getComputedStyle(body);
     var avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    var lo = 8, hi = 14;
-    body.style.lineHeight = '';
-    body.style.fontSize = hi + 'pt';
-    if (inner.offsetHeight <= avail) return;
-    for (var i = 0; i < 14; i++) {
-      var mid = (lo + hi) / 2;
-      body.style.fontSize = mid + 'pt';
-      if (inner.offsetHeight <= avail) lo = mid; else hi = mid;
+    var fits = function() { return inner.offsetHeight <= avail; };
+    var best = null;
+    var lineHeights = [1.8, 1.6, 1.4];
+    for (var a = 0; a < lineHeights.length; a++) {
+      var lh0 = lineHeights[a], size;
+      body.style.lineHeight = lh0;
+      body.style.fontSize = '14pt';
+      if (fits()) {
+        size = 14;
+      } else {
+        body.style.fontSize = '8pt';
+        if (!fits()) continue;
+        var lo = 8, hi = 14;
+        for (var i = 0; i < 14; i++) {
+          var mid = (lo + hi) / 2;
+          body.style.fontSize = mid + 'pt';
+          if (fits()) lo = mid; else hi = mid;
+        }
+        size = Math.floor(lo * 10) / 10;
+      }
+      // 行間を詰めるのは、文字がはっきり大きくなるときだけ
+      if (!best || size > best.size + 0.3) best = { size: size, lh: lh0 };
+      if (size >= 14) break;
     }
-    body.style.fontSize = (Math.floor(lo * 10) / 10) + 'pt';
+    if (!best) {
+      body.style.fontSize = '8pt';
+      body.style.lineHeight = 1.4;
+      body.setAttribute('data-fits', 'false');
+      return;
+    }
+    body.setAttribute('data-fits', 'true');
+    body.style.fontSize = best.size + 'pt';
+    if (best.size >= 14 && best.lh === 1.8) { body.style.lineHeight = ''; return; }
     // 1行増えるほどの余りはないが下が空く分は、行間を少し広げて埋める（最大2.2）
-    body.style.lineHeight = '';
-    var lhLo = 1.8, lhHi = 2.2;
+    var lhLo = best.lh, lhHi = 2.2;
     for (var j = 0; j < 10; j++) {
       var lh = (lhLo + lhHi) / 2;
       body.style.lineHeight = lh;
-      if (inner.offsetHeight <= avail) lhLo = lh; else lhHi = lh;
+      if (fits()) lhLo = lh; else lhHi = lh;
     }
     body.style.lineHeight = Math.floor(lhLo * 100) / 100;
   }
@@ -649,8 +690,8 @@ async function saveReport(andPrint) {
     return;
   }
   var len = document.getElementById('content-editor').innerText.length;
-  if (len > 650) {
-    alert('報告内容が ' + len + ' 文字あります。A4の1枚に読みやすく収めるため、650文字以内にしてください。');
+  if (len > MAX_CHARS) {
+    alert('報告内容が ' + len + ' 文字あります。A4の1枚に読みやすく収めるため、' + MAX_CHARS + '文字以内にしてください。');
     return;
   }
   var btns = document.querySelectorAll('.save-btn');
@@ -658,6 +699,11 @@ async function saveReport(andPrint) {
   btns.forEach(function(b, i) { labels[i] = b.textContent; b.disabled = true; });
   (andPrint ? btns[1] : btns[0]).textContent = '保存しています…';
   try {
+    // 押し間違いの二重保存を防ぐため、ボタンを止めてから確かめる
+    if (!(await checkReportFits(data))) {
+      alert('改行や空いた行が多いため、A4の1枚に収まりません。空いた行を減らすか、文章をつなげてください。');
+      return;
+    }
     var id;
     if (window._editingId) {
       id = window._editingId;
